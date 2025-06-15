@@ -136,7 +136,11 @@ cd rocket_fuel_trading-0.0.1 && \
 python3 -m venv trading_env && \
 ./trading_env/bin/pip install -e . && \
 mv env.example .env && \
-echo "Now edit the .env file with your credentials and run: nohup ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &"
+nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
+          HYPERLIQUID_API_KEY="your_private_key" \
+          HYPERLIQUID_API_ADDRESS="your_wallet_address" \
+          DEFAULT_POSITION_SIZE_USD="12" \
+          ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &
 ```
 
 > **Note**: Replace `v0.0.1` with the latest release version from [GitHub Releases](https://github.com/atomic-235/rocket_fuel_trading/releases)
@@ -144,29 +148,17 @@ echo "Now edit the .env file with your credentials and run: nohup ./trading_env/
 This will:
 - Install all dependencies and create a virtual environment
 - Create a `.env` file from the template
-- Provide instructions for the next steps
+- Run in background with `nohup` (continues after session disconnect)
+- Log output to `trading.log` file
+- Return control to your terminal immediately
 
 > **Note**: Amazon Linux 2023 uses `dnf` package manager by default
 
-**Next steps after running the one-liner:**
-
-1. **Edit the `.env` file** with your credentials:
-```bash
-nano .env
-```
-
-2. **Update these required values**:
-```bash
-TELEGRAM_BOT_TOKEN=your_bot_token_here          # Get from @BotFather
-HYPERLIQUID_API_KEY=your_private_key            # Your Hyperliquid private key  
-HYPERLIQUID_API_ADDRESS=your_wallet_address     # Wallet address used to create API key
-DEFAULT_POSITION_SIZE_USD=12                    # USD amount per trade
-```
-
-3. **Start the trading consumer**:
-```bash
-nohup ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &
-```
+Replace the values:
+- `your_bot_token` - Get from [@BotFather](https://t.me/BotFather)
+- `your_private_key` - Your Hyperliquid private key
+- `your_wallet_address` - **The wallet address used to create your API key** (truncated version shown in top-right corner of Hyperliquid)
+- `12` - USD amount per trade (adjust as needed)
 
 **Management commands:**
 ```bash
@@ -181,7 +173,11 @@ pkill -f trading_consumer.main
 
 # Restart the service (from rocket_fuel_trading-0.0.1 directory)
 cd rocket_fuel_trading-0.0.1 && \
-nohup ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &
+nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
+          HYPERLIQUID_API_KEY="your_private_key" \
+          HYPERLIQUID_API_ADDRESS="your_wallet_address" \
+          DEFAULT_POSITION_SIZE_USD="12" \
+          ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &
 ```
 
 ## 📋 Configuration Reference
