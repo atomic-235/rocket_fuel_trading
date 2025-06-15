@@ -136,11 +136,17 @@ cd rocket_fuel_trading-0.0.1 && \
 python3 -m venv trading_env && \
 ./trading_env/bin/pip install -e . && \
 mv env.example .env && \
+echo "🚀 Setup complete! Starting trading consumer in background..." && \
 nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
           HYPERLIQUID_API_KEY="your_private_key" \
           HYPERLIQUID_API_ADDRESS="your_wallet_address" \
           DEFAULT_POSITION_SIZE_USD="12" \
           ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &
+```
+
+**Check logs after setup:**
+```bash
+tail -f rocket_fuel_trading-0.0.1/trading.log
 ```
 
 > **Note**: Replace `v0.0.1` with the latest release version from [GitHub Releases](https://github.com/atomic-235/rocket_fuel_trading/releases)
