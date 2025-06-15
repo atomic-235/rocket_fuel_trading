@@ -54,17 +54,28 @@ trading_consumer/
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.8+
+- Amazon Linux 2023
+- Python 3.9+
 - Telegram Bot Token
 - Hyperliquid wallet address and private key
 - Access to target Telegram channel/chat
 
 ### Installation
 
+#### Option 1: From GitHub Release (Recommended)
+```bash
+# Install latest release directly
+pip install https://github.com/atomic-235/rocket_fuel_trading/archive/refs/tags/v0.0.1.tar.gz
+
+# Or install with development dependencies
+pip install "https://github.com/atomic-235/rocket_fuel_trading/archive/refs/tags/v0.0.1.tar.gz[dev]"
+```
+
+#### Option 2: From Source
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd trading_consumer
+git clone https://github.com/atomic-235/rocket_fuel_trading.git
+cd rocket_fuel_trading
 
 # Install the package
 pip install -e .
@@ -115,17 +126,63 @@ python scripts/test_connection.py
 
 ### 🚀 One-liner Setup & Run
 
-For quick deployment on any Ubuntu system:
+For quick deployment on any Amazon Linux 2023 system:
 
 ```bash
-git clone https://github.com/atomic-235/rocket_fuel_trading.git && cd rocket_fuel_trading && python3 -m pip install -e . && TELEGRAM_BOT_TOKEN="your_bot_token" HYPERLIQUID_API_KEY="your_private_key" HYPERLIQUID_API_ADDRESS="your_wallet_address" DEFAULT_POSITION_SIZE_USD="12" python -m trading_consumer.main
+sudo dnf update -y && sudo dnf install -y python3 python3-pip wget tar && \
+wget https://github.com/atomic-235/rocket_fuel_trading/archive/refs/tags/v0.0.1.tar.gz && \
+tar -xzf v0.0.1.tar.gz && \
+cd rocket_fuel_trading-0.0.1 && \
+python3 -m venv trading_env && \
+./trading_env/bin/pip install -e . && \
+mv env.example .env && \
+echo "Now edit the .env file with your credentials and run: nohup ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &"
 ```
 
-Replace the values:
-- `your_bot_token` - Get from [@BotFather](https://t.me/BotFather)
-- `your_private_key` - Your Hyperliquid private key
-- `your_wallet_address` - **The wallet address used to create your API key** (truncated version shown in top-right corner of Hyperliquid)
-- `12` - USD amount per trade (adjust as needed)
+> **Note**: Replace `v0.0.1` with the latest release version from [GitHub Releases](https://github.com/atomic-235/rocket_fuel_trading/releases)
+
+This will:
+- Install all dependencies and create a virtual environment
+- Create a `.env` file from the template
+- Provide instructions for the next steps
+
+> **Note**: Amazon Linux 2023 uses `dnf` package manager by default
+
+**Next steps after running the one-liner:**
+
+1. **Edit the `.env` file** with your credentials:
+```bash
+nano .env
+```
+
+2. **Update these required values**:
+```bash
+TELEGRAM_BOT_TOKEN=your_bot_token_here          # Get from @BotFather
+HYPERLIQUID_API_KEY=your_private_key            # Your Hyperliquid private key  
+HYPERLIQUID_API_ADDRESS=your_wallet_address     # Wallet address used to create API key
+DEFAULT_POSITION_SIZE_USD=12                    # USD amount per trade
+```
+
+3. **Start the trading consumer**:
+```bash
+nohup ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &
+```
+
+**Management commands:**
+```bash
+# Check if running
+ps aux | grep trading_consumer
+
+# View logs in real-time
+tail -f rocket_fuel_trading-0.0.1/trading.log
+
+# Stop the process
+pkill -f trading_consumer.main
+
+# Restart the service (from rocket_fuel_trading-0.0.1 directory)
+cd rocket_fuel_trading-0.0.1 && \
+nohup ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &
+```
 
 ## 📋 Configuration Reference
 
