@@ -5,7 +5,7 @@ Trading-related Pydantic models.
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -161,18 +161,4 @@ class TradeResult(BaseModel):
 class RiskParameters(BaseModel):
     """Risk management parameters."""
     
-    max_position_size: Decimal = Field(gt=0)
-    max_leverage: int = Field(default=10, ge=1, le=100)
-    stop_loss_percentage: float = Field(default=0.05, gt=0, le=1)
-    take_profit_percentage: float = Field(default=0.10, gt=0, le=1)
-    risk_per_trade: float = Field(default=0.02, gt=0, le=1)
-    max_daily_loss: Decimal = Field(gt=0)
-    max_open_positions: int = Field(default=5, ge=1)
-    
-    @field_validator('stop_loss_percentage', 'take_profit_percentage', 'risk_per_trade')
-    @classmethod
-    def validate_percentages(cls, v):
-        """Validate percentage values."""
-        if not 0 < v <= 1:
-            raise ValueError("Percentages must be between 0 and 1")
-        return v 
+    max_leverage: int = Field(default=10, ge=1, le=100) 

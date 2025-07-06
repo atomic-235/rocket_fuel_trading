@@ -140,9 +140,14 @@ mv env.example .env && \
 echo "🚀 Setup complete! Starting trading consumer in background..." && \
 nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
           TELEGRAM_CHAT_IDS="your_chat_ids" \
+          OWNER_TELEGRAM_ID="your_telegram_id" \
           HYPERLIQUID_API_KEY="your_private_key" \
           HYPERLIQUID_API_ADDRESS="your_wallet_address" \
           DEFAULT_POSITION_SIZE_USD="12" \
+          MIN_CONFIDENCE="0.5" \
+          DEFAULT_LEVERAGE="2" \
+          DEFAULT_TP_PERCENT="0.05" \
+          DEFAULT_SL_PERCENT="0.02" \
           ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &
 ```
 
@@ -165,9 +170,11 @@ This will:
 Replace the values:
 - `your_bot_token` - Get from [@BotFather](https://t.me/BotFather)
 - `your_chat_ids` - Comma-separated chat/channel IDs (e.g., "-1001234567890,-1009876543210")
+- `your_telegram_id` - Your Telegram ID for notifications (get it from [@username_to_id_bot](https://t.me/username_to_id_bot))
 - `your_private_key` - Your Hyperliquid private key
 - `your_wallet_address` - **The wallet address used to create your API key** (truncated version shown in top-right corner of Hyperliquid)
 - `12` - USD amount per trade (adjust as needed)
+- `0.5` - Minimum signal confidence (0.0-1.0, lower = more signals accepted)
 
 **Management commands:**
 ```bash
@@ -184,9 +191,11 @@ pkill -f trading_consumer.main
 cd rocket_fuel_trading-0.1.0 && \
 nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
           TELEGRAM_CHAT_IDS="your_chat_ids" \
+          OWNER_TELEGRAM_ID="your_telegram_id" \
           HYPERLIQUID_API_KEY="your_private_key" \
           HYPERLIQUID_API_ADDRESS="your_wallet_address" \
           DEFAULT_POSITION_SIZE_USD="12" \
+          MIN_CONFIDENCE="0.5" \
           ./trading_env/bin/python -m trading_consumer.main > trading.log 2>&1 &
 ```
 
@@ -208,10 +217,7 @@ nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
 | `DEFAULT_LEVERAGE` | Default leverage multiplier | `2` |
 | `DEFAULT_TP_PERCENT` | Take profit percentage | `0.05` (5%) |
 | `DEFAULT_SL_PERCENT` | Stop loss percentage | `0.02` (2%) |
-| `MAX_POSITION_SIZE` | Maximum position size | `1000` |
 | `MAX_LEVERAGE` | Maximum allowed leverage | `10` |
-| `MAX_OPEN_POSITIONS` | Maximum concurrent positions | `5` |
-| `MAX_DAILY_LOSS` | Daily loss limit (USD) | `500` |
 | `MIN_CONFIDENCE` | Minimum signal confidence | `0.7` |
 
 ### Hyperliquid Settings

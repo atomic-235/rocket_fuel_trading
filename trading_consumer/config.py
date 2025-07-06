@@ -51,18 +51,11 @@ def load_config(env_file: Optional[str] = None) -> AppConfig:
         
         # Trading configuration
         trading_config = TradingConfig(
-            default_position_size=float(os.getenv("DEFAULT_POSITION_SIZE", "100")),
             default_position_size_usd=float(os.getenv("DEFAULT_POSITION_SIZE_USD", "12")),
             default_leverage=int(os.getenv("DEFAULT_LEVERAGE", "2")),
             default_tp_percent=float(os.getenv("DEFAULT_TP_PERCENT", "0.05")),
             default_sl_percent=float(os.getenv("DEFAULT_SL_PERCENT", "0.02")),
-            max_position_size=float(os.getenv("MAX_POSITION_SIZE", "1000")),
-            risk_percentage=float(os.getenv("RISK_PERCENTAGE", "0.02")),
-            stop_loss_percentage=float(os.getenv("STOP_LOSS_PERCENTAGE", "0.05")),
-            take_profit_percentage=float(os.getenv("TAKE_PROFIT_PERCENTAGE", "0.10")),
             max_leverage=int(os.getenv("MAX_LEVERAGE", "10")),
-            max_open_positions=int(os.getenv("MAX_OPEN_POSITIONS", "5")),
-            max_daily_loss=float(os.getenv("MAX_DAILY_LOSS", "500")),
             min_confidence=float(os.getenv("MIN_CONFIDENCE", "0.7")),
         )
         
@@ -133,14 +126,9 @@ def validate_config(config: AppConfig) -> None:
         raise ValueError("HYPERLIQUID_API_KEY is required")
     
     # Validate trading config
-    if config.trading.max_position_size <= config.trading.default_position_size:
+    if config.trading.default_sl_percent >= config.trading.default_tp_percent:
         logger.warning(
-            "MAX_POSITION_SIZE should be greater than DEFAULT_POSITION_SIZE"
-        )
-    
-    if config.trading.stop_loss_percentage >= config.trading.take_profit_percentage:
-        logger.warning(
-            "STOP_LOSS_PERCENTAGE should be less than TAKE_PROFIT_PERCENTAGE"
+            "DEFAULT_SL_PERCENT should be less than DEFAULT_TP_PERCENT"
         )
     
     # Log configuration summary
@@ -152,5 +140,4 @@ def validate_config(config: AppConfig) -> None:
     logger.info(f"Default Leverage: {config.trading.default_leverage}x")
     logger.info(f"Default TP: {config.trading.default_tp_percent*100}%")
     logger.info(f"Default SL: {config.trading.default_sl_percent*100}%")
-    logger.info(f"Max Leverage: {config.trading.max_leverage}")
-    logger.info(f"Risk Percentage: {config.trading.risk_percentage * 100}%") 
+    logger.info(f"Max Leverage: {config.trading.max_leverage}") 

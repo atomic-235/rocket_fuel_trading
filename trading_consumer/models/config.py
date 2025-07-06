@@ -57,29 +57,14 @@ class HyperliquidConfig(BaseModel):
 class TradingConfig(BaseModel):
     """Trading configuration."""
     
-    default_position_size: float = Field(default=100.0, gt=0)
     default_position_size_usd: float = Field(default=12.0, gt=0)  # Default USD amount for orders
     default_leverage: int = Field(default=2, ge=1, le=100)  # Default leverage
     default_tp_percent: float = Field(default=0.05, gt=0, le=1)  # Default take profit %
     default_sl_percent: float = Field(default=0.02, gt=0, le=1)  # Default stop loss %
-    max_position_size: float = Field(default=1000.0, gt=0)
-    risk_percentage: float = Field(default=0.02, gt=0, le=1)
-    stop_loss_percentage: float = Field(default=0.05, gt=0, le=1)
-    take_profit_percentage: float = Field(default=0.10, gt=0, le=1)
     max_leverage: int = Field(default=10, ge=1, le=100)
-    max_open_positions: int = Field(default=5, ge=1)
-    max_daily_loss: float = Field(default=500.0, gt=0)
-    min_confidence: float = Field(default=0.7, ge=0, le=1)
+    min_confidence: float = Field(default=0.5, ge=0, le=1)
     
-    @field_validator('max_position_size')
-    @classmethod
-    def validate_max_position_size(cls, v, info):
-        """Validate max position size is greater than default."""
-        if info.data and 'default_position_size' in info.data and v <= info.data['default_position_size']:
-            raise ValueError("Max position size must be greater than default position size")
-        return v
-    
-    @field_validator('risk_percentage', 'stop_loss_percentage', 'take_profit_percentage', 'min_confidence')
+    @field_validator('min_confidence')
     @classmethod
     def validate_percentages(cls, v):
         """Validate percentage values."""
