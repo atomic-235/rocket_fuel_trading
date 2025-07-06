@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="trading_consumer",
-    version="0.1.0",
+    version="0.1.1",
     description="Independent trading consumer that reads Telegram messages and executes trades on Hyperliquid",
     author="Trading Bot",
     packages=find_packages(),
