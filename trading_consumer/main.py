@@ -5,7 +5,8 @@ Main entry point for the trading consumer - Production Pipeline.
 import asyncio
 import signal
 import sys
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Optional, List
 # Removed Decimal import - using float throughout
 from loguru import logger
 
@@ -15,6 +16,19 @@ from .parsers import SignalParser
 from .trading import HyperliquidExchange
 from .models.telegram import TelegramMessage
 from .models.trading import TradingSignal, TradeOrder, OrderType, SignalType
+from .utils.symbol_resolver import resolve_symbol_for_trading
+
+
+class RecentTrade:
+    """Recent trade data for deduplication."""
+    
+    def __init__(self, symbol: str, signal_type: SignalType, entry_price: Optional[float], 
+                 leverage: Optional[int], timestamp: datetime):
+        self.symbol = symbol
+        self.signal_type = signal_type
+        self.entry_price = entry_price  # Entry price from the signal
+        self.leverage = leverage
+        self.timestamp = timestamp
 
 
 class TradingConsumer:
@@ -27,6 +41,8 @@ class TradingConsumer:
         self.signal_parser: Optional[SignalParser] = None
         self.exchange: Optional[HyperliquidExchange] = None
         self._running = False
+        self._recent_trades: List[RecentTrade] = []  # Track recent trades for deduplication
+        self._trade_dedupe_window = timedelta(minutes=10)  # 10 minute window
     
     async def initialize(self) -> None:
         """Initialize all components."""
@@ -47,7 +63,11 @@ class TradingConsumer:
             await self.exchange.initialize()
             
             logger.info("🚀 Trading Consumer Production Pipeline Initialized")
-            logger.info(f"📊 Default Settings: {self.config.trading.default_leverage}x leverage, {self.config.trading.default_tp_percent*100}% TP, {self.config.trading.default_sl_percent*100}% SL")
+            logger.info(
+                f"📊 Default Settings: {self.config.trading.default_leverage}x leverage, "
+                f"{self.config.trading.default_tp_percent*100}% TP, "
+                f"{self.config.trading.default_sl_percent*100}% SL"
+            )
             
         except Exception as e:
             logger.error(f"Failed to initialize trading consumer: {e}")
@@ -154,10 +174,93 @@ class TradingConsumer:
         except Exception as e:
             logger.error(f"❌ Error handling message: {e}")
     
+    def _cleanup_old_trades(self) -> None:
+        """Remove trades older than the deduplication window."""
+        cutoff_time = datetime.now() - self._trade_dedupe_window
+        self._recent_trades = [
+            trade for trade in self._recent_trades 
+            if trade.timestamp > cutoff_time
+        ]
+    
+    def _is_duplicate_trade(self, signal: TradingSignal) -> bool:
+        """Check if this trade is a duplicate of a recent trade."""
+        self._cleanup_old_trades()
+        
+        # Check against recent trades
+        for recent_trade in self._recent_trades:
+            if (recent_trade.symbol == signal.symbol and 
+                recent_trade.signal_type == signal.signal_type):
+                
+                # Check if key parameters match
+                price_match = (
+                    (recent_trade.entry_price is None and signal.price is None) or
+                    (recent_trade.entry_price is not None and signal.price is not None and
+                     abs(recent_trade.entry_price - signal.price) < 0.01)  # Small tolerance
+                )
+                
+                leverage_match = recent_trade.leverage == signal.leverage
+                
+                if price_match and leverage_match:
+                    time_diff = datetime.now() - recent_trade.timestamp
+                    logger.info(
+                        f"⚠️ Duplicate trade detected: {signal.symbol} {signal.signal_type.value} "
+                        f"(last trade {time_diff.total_seconds():.0f}s ago)"
+                    )
+                    return True
+        
+        return False
+    
+    def _record_trade(self, signal: TradingSignal) -> None:
+        """Record a trade for deduplication tracking."""
+        trade = RecentTrade(
+            symbol=signal.symbol,
+            signal_type=signal.signal_type,
+            entry_price=signal.price,
+            leverage=signal.leverage,
+            timestamp=datetime.now()
+        )
+        self._recent_trades.append(trade)
+        logger.debug(f"📝 Recorded trade: {signal.symbol} {signal.signal_type.value}")
+
     async def _execute_signal(self, signal: TradingSignal) -> None:
         """Execute trading signal - Full Production Implementation."""
         try:
-            logger.info(f"🎯 Executing Signal: {signal.signal_type.value} {signal.symbol} (confidence: {signal.confidence:.2f})")
+            logger.info(
+                f"🎯 Executing Signal: {signal.signal_type.value} {signal.symbol} "
+                f"(confidence: {signal.confidence:.2f})"
+            )
+            
+            # Send notification to owner about valid signal
+            await self._notify_owner_signal_received(signal)
+            
+            # Check for duplicate trades
+            if self._is_duplicate_trade(signal):
+                logger.info("🚫 Skipping duplicate trade")
+                return
+            
+            # Resolve symbol if needed
+            resolved_symbol = signal.symbol
+            if signal.metadata.get("symbol_needs_resolution", False):
+                logger.info(f"🔍 Resolving symbol: {signal.symbol}")
+                resolved_symbol = await resolve_symbol_for_trading(
+                    signal.symbol, self.exchange.exchange
+                )
+                
+                if not resolved_symbol:
+                    logger.error(f"❌ Cannot trade {signal.symbol} - symbol not available on exchange")
+                    logger.info("🚫 Skipping trade due to invalid symbol")
+                    # Notify owner about failed symbol resolution
+                    await self._notify_owner_trade_failed(signal, "Symbol not available on exchange")
+                    return
+                
+                if resolved_symbol != signal.symbol:
+                    logger.info(f"🔄 Symbol resolved: {signal.symbol} → {resolved_symbol}")
+                
+                # Update signal with resolved symbol
+                signal.symbol = resolved_symbol
+            
+            # Record the trade before execution
+            self._record_trade(signal)
             
             # Handle different signal types
             if signal.signal_type in [SignalType.BUY, SignalType.LONG]:
@@ -171,6 +274,8 @@ class TradingConsumer:
                 
         except Exception as e:
             logger.error(f"❌ Error executing signal: {e}")
+            # Notify owner about execution error
+            await self._notify_owner_trade_failed(signal, str(e))
     
     async def _execute_buy_signal(self, signal: TradingSignal) -> None:
         """Execute buy/long signal."""
@@ -264,11 +369,16 @@ class TradingConsumer:
                 logger.info(f"   TP: ${tp_price:,.2f}")
                 logger.info(f"   SL: ${sl_price:,.2f}")
                 
+                # Notify owner about successful trade
+                await self._notify_owner_trade_success(signal, result, tp_price, sl_price)
+                
             else:
                 logger.error("❌ Failed to create market order")
+                await self._notify_owner_trade_failed(signal, "Failed to create market order")
                 
         except Exception as e:
             logger.error(f"❌ Error executing buy signal: {e}")
+            await self._notify_owner_trade_failed(signal, str(e))
     
     async def _execute_sell_signal(self, signal: TradingSignal) -> None:
         """Execute sell/short signal."""
@@ -362,11 +472,16 @@ class TradingConsumer:
                 logger.info(f"   TP: ${tp_price:,.2f}")
                 logger.info(f"   SL: ${sl_price:,.2f}")
                 
+                # Notify owner about successful trade
+                await self._notify_owner_trade_success(signal, result, tp_price, sl_price)
+                
             else:
                 logger.error("❌ Failed to create market order")
+                await self._notify_owner_trade_failed(signal, "Failed to create market order")
                 
         except Exception as e:
             logger.error(f"❌ Error executing sell signal: {e}")
+            await self._notify_owner_trade_failed(signal, str(e))
     
     async def _execute_close_signal(self, signal: TradingSignal) -> None:
         """Execute close signal."""
@@ -403,6 +518,88 @@ class TradingConsumer:
                 
         except Exception as e:
             logger.error(f"❌ Error executing close signal: {e}")
+    
+    async def _notify_owner_signal_received(self, signal: TradingSignal) -> None:
+        """Notify owner about valid signal received."""
+        try:
+            if not self.telegram_client:
+                return
+            
+            # Format signal details
+            signal_details = [
+                f"📊 <b>Signal Received</b>",
+                f"🎯 <b>Type:</b> {signal.signal_type.value}",
+                f"💰 <b>Symbol:</b> {signal.symbol}",
+                f"📈 <b>Confidence:</b> {signal.confidence:.2f}",
+            ]
+            
+            # Add price details if available
+            if signal.price:
+                signal_details.append(f"💵 <b>Price:</b> ${signal.price:.4f}")
+            
+            if signal.leverage:
+                signal_details.append(f"⚡ <b>Leverage:</b> {signal.leverage}x")
+            
+            if signal.take_profit:
+                signal_details.append(f"🎯 <b>Take Profit:</b> ${signal.take_profit:.4f}")
+            
+            if signal.stop_loss:
+                signal_details.append(f"🛑 <b>Stop Loss:</b> ${signal.stop_loss:.4f}")
+            
+            # Add metadata
+            sender = signal.metadata.get("sender", "Unknown")
+            signal_details.append(f"👤 <b>From:</b> {sender}")
+            
+            message = "\n".join(signal_details)
+            
+            await self.telegram_client.send_owner_notification(message)
+            
+        except Exception as e:
+            logger.error(f"Failed to send owner notification: {e}")
+    
+    async def _notify_owner_trade_failed(self, signal: TradingSignal, error_message: str) -> None:
+        """Notify owner about failed trade."""
+        try:
+            if not self.telegram_client:
+                return
+            
+            message = (
+                f"❌ <b>Trade Failed</b>\n\n"
+                f"🎯 <b>Signal:</b> {signal.signal_type.value} {signal.symbol}\n"
+                f"📈 <b>Confidence:</b> {signal.confidence:.2f}\n"
+                f"💥 <b>Error:</b> {error_message}"
+            )
+            
+            await self.telegram_client.send_owner_notification(message)
+            
+        except Exception as e:
+            logger.error(f"Failed to send failure notification: {e}")
+    
+    async def _notify_owner_trade_success(self, signal: TradingSignal, result, tp_price: float, sl_price: float) -> None:
+        """Notify owner about successful trade."""
+        try:
+            if not self.telegram_client:
+                return
+            
+            # Calculate entry price
+            entry_price = float(signal.price) if signal.price else 0.0
+            
+            message = (
+                f"✅ <b>Trade Executed</b>\n\n"
+                f"🎯 <b>Signal:</b> {signal.signal_type.value} {signal.symbol}\n"
+                f"📈 <b>Confidence:</b> {signal.confidence:.2f}\n"
+                f"💰 <b>Order ID:</b> {result.id}\n"
+                f"📊 <b>Status:</b> {result.status.value}\n"
+                f"💵 <b>Entry Price:</b> ${entry_price:.4f}\n"
+                f"🎯 <b>Take Profit:</b> ${tp_price:.4f}\n"
+                f"🛑 <b>Stop Loss:</b> ${sl_price:.4f}\n"
+                f"⚡ <b>Leverage:</b> {signal.leverage or 'Default'}x"
+            )
+            
+            await self.telegram_client.send_owner_notification(message)
+            
+        except Exception as e:
+            logger.error(f"Failed to send success notification: {e}")
 
 
 async def main() -> None:

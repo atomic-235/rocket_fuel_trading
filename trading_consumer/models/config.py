@@ -11,6 +11,7 @@ class TelegramConfig(BaseModel):
     
     bot_token: str = Field(..., min_length=1)
     chat_ids: List[int] = Field(..., min_length=1)  # Support multiple chat IDs
+    owner_telegram_id: Optional[int] = None  # Owner's Telegram ID for notifications
     allowed_users: Optional[List[str]] = None
     allowed_user_ids: Optional[List[int]] = None  # Filter by user IDs
     message_processing_delay: float = Field(default=1.0, ge=0.1)

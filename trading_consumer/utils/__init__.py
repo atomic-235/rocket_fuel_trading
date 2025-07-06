@@ -1,7 +1,7 @@
 """
-Utility modules for trading consumer.
+Utility modules for the trading consumer.
 """
 
-from .symbol_mapper import SymbolMapper, symbol_mapper
+from .symbol_resolver import SymbolResolver, get_symbol_resolver, resolve_symbol_for_trading
 
-__all__ = ['SymbolMapper', 'symbol_mapper'] 
+__all__ = ['SymbolResolver', 'get_symbol_resolver', 'resolve_symbol_for_trading'] 

@@ -31,6 +31,7 @@ def load_config(env_file: Optional[str] = None) -> AppConfig:
         telegram_config = TelegramConfig(
             bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
             chat_ids=_parse_int_list(os.getenv("TELEGRAM_CHAT_IDS", "")),
+            owner_telegram_id=int(os.getenv("OWNER_TELEGRAM_ID")) if os.getenv("OWNER_TELEGRAM_ID") else None,
             allowed_users=_parse_list(os.getenv("TELEGRAM_ALLOWED_USERS")),
             allowed_user_ids=_parse_int_list(os.getenv("TELEGRAM_ALLOWED_USER_IDS")),
             message_processing_delay=float(os.getenv("MESSAGE_PROCESSING_DELAY", "1.0")),

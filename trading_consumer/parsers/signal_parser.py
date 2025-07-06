@@ -3,12 +3,11 @@ Signal parser for extracting trading signals from Telegram messages.
 """
 
 # Removed regex and Decimal imports - only JSON parsing used
-from typing import Optional, List, Dict, Any
+from typing import Optional
 from loguru import logger
 
 from ..models.telegram import TelegramMessage
 from ..models.trading import TradingSignal, SignalType
-from ..utils.symbol_mapper import symbol_mapper
 from .pattern_matcher import PatternMatcher
 
 
@@ -74,11 +73,11 @@ class SignalParser:
             # Extract symbol (handle case properly)
             raw_symbol = trade.get('ticker', '').strip().upper()
             if not raw_symbol:
-                logger.warning(f"No ticker found in JSON trade data - skipping signal")
+                logger.warning("No ticker found in JSON trade data - skipping signal")
                 return None
             
-            # Map symbol to exchange-specific format (e.g., PEPE -> kPEPE for Hyperliquid)
-            symbol = symbol_mapper.map_to_hyperliquid(raw_symbol)
+            # Store original symbol - resolution will happen at trade execution time
+            symbol = raw_symbol
             
             # Extract other fields
             price = trade.get('entry_price')
@@ -124,7 +123,7 @@ class SignalParser:
                     "trade_type": trade.get('trade_type'),
                     "asset_name": trade.get('asset_name'),
                     "original_symbol": raw_symbol,
-                    "mapped_symbol": symbol,
+                    "symbol_needs_resolution": True,  # Flag for later resolution
                 }
             )
             
@@ -138,5 +137,5 @@ class SignalParser:
         except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
             logger.debug(f"Not valid JSON trade data: {e}")
             return None
-    
+
 # All text parsing methods removed - only JSON parsing is used 

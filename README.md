@@ -97,6 +97,7 @@ cp env.example .env
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_CHAT_IDS=your_target_chat_ids  # Comma-separated chat IDs
 TELEGRAM_ALLOWED_USER_IDS=123456789  # Comma-separated user IDs
+OWNER_TELEGRAM_ID=your_telegram_id_for_notifications
 
 # Hyperliquid Configuration
 HYPERLIQUID_API_ADDRESS=your_wallet_address
@@ -196,6 +197,7 @@ nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
 |----------|-------------|---------|
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | **Required** |
 | `TELEGRAM_CHAT_IDS` | Comma-separated target chat/channel IDs | **Required** |
+| `OWNER_TELEGRAM_ID` | Your Telegram ID for trade notifications | Optional |
 | `TELEGRAM_ALLOWED_USER_IDS` | Comma-separated allowed user IDs | Optional |
 | `TELEGRAM_ALLOWED_USERS` | Comma-separated allowed usernames | Optional |
 

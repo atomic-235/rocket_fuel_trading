@@ -42,6 +42,11 @@ class HyperliquidExchange:
             await self._test_connection()
             self._connected = True
             
+            # Initialize symbol resolver
+            from ..utils.symbol_resolver import get_symbol_resolver
+            resolver = get_symbol_resolver()
+            resolver.set_exchange(self.exchange)
+            
             logger.info("Hyperliquid exchange initialized successfully")
             
         except Exception as e:

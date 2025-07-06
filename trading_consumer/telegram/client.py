@@ -236,7 +236,10 @@ class TelegramClient:
         if not self.bot:
             raise RuntimeError("Telegram client not initialized")
         
-        target_chat_id = chat_id or self.config.chat_id
+        target_chat_id = chat_id or (self.config.chat_ids[0] if self.config.chat_ids else None)
+        
+        if not target_chat_id:
+            raise ValueError("No chat ID specified and no default chat ID configured")
         
         try:
             await self.bot.send_message(
@@ -247,4 +250,20 @@ class TelegramClient:
             logger.debug(f"Sent message to chat {target_chat_id}")
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
-            raise 
+            raise
+    
+    async def send_owner_notification(self, message: str) -> None:
+        """Send notification to the owner."""
+        if not self.config.owner_telegram_id:
+            logger.debug("No owner Telegram ID configured, skipping notification")
+            return
+        
+        try:
+            await self.send_message(
+                text=f"🔔 Trading Bot Notification\n\n{message}",
+                chat_id=self.config.owner_telegram_id
+            )
+            logger.debug(f"Sent owner notification to {self.config.owner_telegram_id}")
+        except Exception as e:
+            logger.error(f"Failed to send owner notification: {e}")
+            # Don't raise - notifications are not critical 
