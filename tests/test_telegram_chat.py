@@ -21,7 +21,7 @@ async def test_bot_can_read_from_chat():
     
     config = load_config(str(env_path))
     
-    print(f"Testing connection to chat ID: {config.telegram.chat_id}")
+    print(f"Testing connection to chat IDs: {config.telegram.chat_ids}")
     print(f"Using bot token: {config.telegram.bot_token[:20]}...")
     
     # Create Telegram client
@@ -36,16 +36,17 @@ async def test_bot_can_read_from_chat():
         bot_info = await client.bot.get_me()
         print(f"✅ Connected as: @{bot_info.username}")
         
-        # Test chat access
-        try:
-            chat_info = await client.bot.get_chat(config.telegram.chat_id)
-            print(f"✅ Can access chat: {chat_info.title or chat_info.type}")
-            print(f"   Chat type: {chat_info.type}")
-            if hasattr(chat_info, 'member_count'):
-                print(f"   Members: {chat_info.member_count}")
-        except Exception as e:
-            print(f"❌ Cannot access chat {config.telegram.chat_id}: {e}")
-            raise
+        # Test chat access for all configured chat IDs
+        for chat_id in config.telegram.chat_ids:
+            try:
+                chat_info = await client.bot.get_chat(chat_id)
+                print(f"✅ Can access chat {chat_id}: {chat_info.title or chat_info.type}")
+                print(f"   Chat type: {chat_info.type}")
+                if hasattr(chat_info, 'member_count'):
+                    print(f"   Members: {chat_info.member_count}")
+            except Exception as e:
+                print(f"❌ Cannot access chat {chat_id}: {e}")
+                raise
         
         # Test actual message reading with timeout
         print("🔍 Testing message reading from channel...")
@@ -101,7 +102,7 @@ async def test_read_last_message_and_validate():
     
     config = load_config(str(env_path))
     
-    print(f"Reading last message from chat ID: {config.telegram.chat_id}")
+    print(f"Reading last message from chat IDs: {config.telegram.chat_ids}")
     
     # Create Telegram client
     client = TelegramClient(config.telegram)
@@ -119,24 +120,24 @@ async def test_read_last_message_and_validate():
             
             if not updates:
                 print("⚠️  No recent updates found")
-                print("   Try posting a message to the channel first")
+                print("   Try posting a message to one of the monitored channels first")
                 return
             
             print(f"📥 Found {len(updates)} recent updates")
             
-            # Find the most recent message from our target chat
+            # Find the most recent message from any of our target chats
             target_message = None
             for update in reversed(updates):  # Check most recent first
-                if update.message and update.message.chat.id == config.telegram.chat_id:
+                if update.message and update.message.chat.id in config.telegram.chat_ids:
                     target_message = update.message
                     break
-                elif update.channel_post and update.channel_post.chat.id == config.telegram.chat_id:
+                elif update.channel_post and update.channel_post.chat.id in config.telegram.chat_ids:
                     target_message = update.channel_post
                     break
             
             if not target_message:
-                print("⚠️  No messages found from the target channel in recent updates")
-                print("   Try posting a new message to the channel")
+                print("⚠️  No messages found from any of the target channels in recent updates")
+                print("   Try posting a new message to one of the monitored channels")
                 return
             
             print(f"📨 Found last message!")
@@ -151,7 +152,7 @@ async def test_read_last_message_and_validate():
             
             # Validate the message structure
             assert telegram_message.message_id > 0, "Message ID should be positive"
-            assert telegram_message.chat.id == config.telegram.chat_id, "Chat ID should match"
+            assert telegram_message.chat.id in config.telegram.chat_ids, "Chat ID should be in configured chat IDs"
             assert telegram_message.date is not None, "Date should be set"
             
             print("✅ Message structure validation passed!")
@@ -212,20 +213,21 @@ async def test_channel_permissions():
     try:
         await client.initialize()
         
-        # Check if bot is admin in the channel
-        try:
-            chat_member = await client.bot.get_chat_member(config.telegram.chat_id, client.bot.id)
-            print(f"Bot status in channel: {chat_member.status}")
-            
-            if chat_member.status in ['administrator', 'creator']:
-                print("✅ Bot has admin privileges - can read message history")
-            elif chat_member.status == 'member':
-                print("⚠️  Bot is a member - can only read new messages")
-            else:
-                print(f"❓ Bot status: {chat_member.status}")
+        # Check if bot is admin in each channel
+        for chat_id in config.telegram.chat_ids:
+            try:
+                chat_member = await client.bot.get_chat_member(chat_id, client.bot.id)
+                print(f"Bot status in channel {chat_id}: {chat_member.status}")
                 
-        except Exception as e:
-            print(f"Cannot get bot status: {e}")
+                if chat_member.status in ['administrator', 'creator']:
+                    print(f"✅ Bot has admin privileges in chat {chat_id} - can read message history")
+                elif chat_member.status == 'member':
+                    print(f"⚠️  Bot is a member in chat {chat_id} - can only read new messages")
+                else:
+                    print(f"❓ Bot status in chat {chat_id}: {chat_member.status}")
+                    
+            except Exception as e:
+                print(f"Cannot get bot status for chat {chat_id}: {e}")
         
     except Exception as e:
         print(f"Permission check failed: {e}")

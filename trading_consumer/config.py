@@ -30,7 +30,7 @@ def load_config(env_file: Optional[str] = None) -> AppConfig:
         # Telegram configuration
         telegram_config = TelegramConfig(
             bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
-            chat_id=int(os.getenv("TELEGRAM_CHAT_ID", "0")),
+            chat_ids=_parse_int_list(os.getenv("TELEGRAM_CHAT_IDS", "")),
             allowed_users=_parse_list(os.getenv("TELEGRAM_ALLOWED_USERS")),
             allowed_user_ids=_parse_int_list(os.getenv("TELEGRAM_ALLOWED_USER_IDS")),
             message_processing_delay=float(os.getenv("MESSAGE_PROCESSING_DELAY", "1.0")),
@@ -107,10 +107,10 @@ def _parse_list(value: Optional[str]) -> Optional[list]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def _parse_int_list(value: Optional[str]) -> Optional[list]:
+def _parse_int_list(value: Optional[str]) -> list:
     """Parse integer list value from comma-separated string."""
     if not value:
-        return None
+        return []
     return [int(item.strip()) for item in value.split(",") if item.strip()]
 
 
@@ -121,8 +121,8 @@ def validate_config(config: AppConfig) -> None:
     if not config.telegram.bot_token:
         raise ValueError("TELEGRAM_BOT_TOKEN is required")
     
-    if config.telegram.chat_id == 0:
-        raise ValueError("TELEGRAM_CHAT_ID is required")
+    if not config.telegram.chat_ids:
+        raise ValueError("TELEGRAM_CHAT_IDS is required")
     
     # Validate Hyperliquid config
     if not config.hyperliquid.wallet_address:
@@ -144,7 +144,7 @@ def validate_config(config: AppConfig) -> None:
     
     # Log configuration summary
     logger.info("Configuration validation completed")
-    logger.info(f"Telegram Chat ID: {config.telegram.chat_id}")
+    logger.info(f"Telegram Chat IDs: {config.telegram.chat_ids}")
     logger.info(f"Allowed User IDs: {config.telegram.allowed_user_ids}")
     logger.info(f"Hyperliquid Testnet: {config.hyperliquid.testnet}")
     logger.info(f"Default Position Size USD: ${config.trading.default_position_size_usd}")

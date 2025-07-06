@@ -10,7 +10,7 @@ class TelegramConfig(BaseModel):
     """Telegram bot configuration."""
     
     bot_token: str = Field(..., min_length=1)
-    chat_id: int
+    chat_ids: List[int] = Field(..., min_length=1)  # Support multiple chat IDs
     allowed_users: Optional[List[str]] = None
     allowed_user_ids: Optional[List[int]] = None  # Filter by user IDs
     message_processing_delay: float = Field(default=1.0, ge=0.1)
@@ -23,6 +23,14 @@ class TelegramConfig(BaseModel):
         """Validate bot token format."""
         if not v or ':' not in v:
             raise ValueError("Invalid bot token format")
+        return v
+    
+    @field_validator('chat_ids')
+    @classmethod
+    def validate_chat_ids(cls, v):
+        """Validate chat IDs list."""
+        if not v or len(v) == 0:
+            raise ValueError("At least one chat ID is required")
         return v
 
 

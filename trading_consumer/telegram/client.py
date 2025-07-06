@@ -68,7 +68,7 @@ class TelegramClient:
             )
             
             logger.info(f"📱 Telegram client started")
-            logger.info(f"🎯 Monitoring chat ID: {self.config.chat_id}")
+            logger.info(f"🎯 Monitoring chat IDs: {self.config.chat_ids}")
             if self.config.allowed_user_ids:
                 logger.info(f"👥 Allowed user IDs: {self.config.allowed_user_ids}")
             elif self.config.allowed_users:
@@ -123,9 +123,9 @@ class TelegramClient:
             
             logger.info(f"📨 Message from User ID: {user_id} (@{username}) in Chat: {chat_id} ({chat_name})")
             
-             # Filter by chat ID if specified
-            if self.config.chat_id and message.chat_id != self.config.chat_id:
-                logger.info(f"🚫 Ignoring message from chat {message.chat_id} ({chat_name}) - monitoring chat {self.config.chat_id}")
+             # Filter by chat IDs if specified
+            if self.config.chat_ids and message.chat_id not in self.config.chat_ids:
+                logger.info(f"🚫 Ignoring message from chat {message.chat_id} ({chat_name}) - monitoring chats {self.config.chat_ids}")
                 return
             
             # Filter by allowed user IDs if specified (priority over usernames)

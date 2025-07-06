@@ -95,7 +95,7 @@ cp env.example .env
 ```bash
 # Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_CHAT_ID=your_target_chat_id
+TELEGRAM_CHAT_IDS=your_target_chat_ids  # Comma-separated chat IDs
 TELEGRAM_ALLOWED_USER_IDS=123456789  # Comma-separated user IDs
 
 # Hyperliquid Configuration
@@ -138,6 +138,7 @@ python3 -m venv trading_env && \
 mv env.example .env && \
 echo "🚀 Setup complete! Starting trading consumer in background..." && \
 nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
+          TELEGRAM_CHAT_IDS="your_chat_ids" \
           HYPERLIQUID_API_KEY="your_private_key" \
           HYPERLIQUID_API_ADDRESS="your_wallet_address" \
           DEFAULT_POSITION_SIZE_USD="12" \
@@ -162,6 +163,7 @@ This will:
 
 Replace the values:
 - `your_bot_token` - Get from [@BotFather](https://t.me/BotFather)
+- `your_chat_ids` - Comma-separated chat/channel IDs (e.g., "-1001234567890,-1009876543210")
 - `your_private_key` - Your Hyperliquid private key
 - `your_wallet_address` - **The wallet address used to create your API key** (truncated version shown in top-right corner of Hyperliquid)
 - `12` - USD amount per trade (adjust as needed)
@@ -180,6 +182,7 @@ pkill -f trading_consumer.main
 # Restart the service (from rocket_fuel_trading-0.0.1 directory)
 cd rocket_fuel_trading-0.0.1 && \
 nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
+          TELEGRAM_CHAT_IDS="your_chat_ids" \
           HYPERLIQUID_API_KEY="your_private_key" \
           HYPERLIQUID_API_ADDRESS="your_wallet_address" \
           DEFAULT_POSITION_SIZE_USD="12" \
@@ -192,7 +195,7 @@ nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather | **Required** |
-| `TELEGRAM_CHAT_ID` | Target chat/channel ID | **Required** |
+| `TELEGRAM_CHAT_IDS` | Comma-separated target chat/channel IDs | **Required** |
 | `TELEGRAM_ALLOWED_USER_IDS` | Comma-separated allowed user IDs | Optional |
 | `TELEGRAM_ALLOWED_USERS` | Comma-separated allowed usernames | Optional |
 
@@ -241,6 +244,25 @@ python scripts/test_market_order.py
 
 # Test TP/SL order placement
 python scripts/test_exchange_tp_sl.py
+```
+
+### Environment Management
+```bash
+# Switch to development environment (testnet)
+python scripts/switch_env.py dev
+
+# Switch to production environment (mainnet) and set variables
+python scripts/switch_env.py prod --set
+
+# Generate shell script to set environment variables
+python scripts/switch_env.py dev --shell
+source set_env_dev.sh
+
+# List available environment files
+python scripts/switch_env.py --list
+
+# Create backup before switching
+python scripts/switch_env.py prod --backup
 ```
 
 ## 📊 Signal Format

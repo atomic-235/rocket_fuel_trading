@@ -24,6 +24,9 @@ async def test_connection():
         # Load config
         config = load_config()
         
+        # Show chat IDs being monitored
+        print(f"📱 Monitoring chat IDs: {config.telegram.chat_ids}")
+        
         # Initialize exchange
         exchange = HyperliquidExchange(config.hyperliquid)
         await exchange.initialize()
