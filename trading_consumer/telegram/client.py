@@ -3,13 +3,13 @@ Telegram client for message consumption.
 """
 
 import asyncio
-from typing import Optional, Callable, List
+from typing import Optional, Callable
 from telegram import Bot, Update
 from telegram.ext import Application, MessageHandler, filters
 from loguru import logger
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from ..models.telegram import TelegramMessage, TelegramUpdate, TelegramUser, TelegramChat
+from ..models.telegram import TelegramMessage, TelegramUser, TelegramChat
 from ..models.config import TelegramConfig
 
 
@@ -61,10 +61,16 @@ class TelegramClient:
             await self.application.initialize()
             await self.application.start()
             
-            # Start polling for updates
+            # Start polling for updates with debug logging
+            logger.info("🔄 Starting Telegram polling...")
             await self.application.updater.start_polling(
                 drop_pending_updates=True,
-                allowed_updates=["message", "channel_post"]
+                allowed_updates=["message", "channel_post"],
+                timeout=30,
+                read_timeout=30,
+                write_timeout=30,
+                connect_timeout=30,
+                pool_timeout=30
             )
             
             logger.info(f"📱 Telegram client started")
@@ -76,10 +82,16 @@ class TelegramClient:
             else:
                 logger.info(f"👥 No user filtering configured - accepting all users")
             
-            # Keep running until stopped
+            # Keep running until stopped with periodic health checks
+            health_check_counter = 0
             while self._running:
-                await asyncio.sleep(1)
-                
+                await asyncio.sleep(60)  # Check every minute
+                health_check_counter += 1
+                if health_check_counter % 5 == 0:  # Log every 5 minutes
+                    logger.info(f"🔄 Bot health check - running for {health_check_counter} minutes")
+                    if hasattr(self.application.updater, 'running'):
+                        logger.info(f"📡 Updater status: {self.application.updater.running}")
+                        
         except Exception as e:
             logger.error(f"Error running Telegram client: {e}")
             raise
