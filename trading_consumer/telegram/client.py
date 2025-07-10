@@ -61,37 +61,26 @@ class TelegramClient:
             await self.application.initialize()
             await self.application.start()
             
-            # Start polling for updates with debug logging
+            # Start polling for updates
             logger.info("🔄 Starting Telegram polling...")
             await self.application.updater.start_polling(
                 drop_pending_updates=True,
-                allowed_updates=["message", "channel_post"],
-                timeout=30,
-                read_timeout=30,
-                write_timeout=30,
-                connect_timeout=30,
-                pool_timeout=30
+                allowed_updates=["message", "channel_post"]
             )
             
-            logger.info(f"📱 Telegram client started")
+            logger.info("📱 Telegram client started")
             logger.info(f"🎯 Monitoring chat IDs: {self.config.chat_ids}")
             if self.config.allowed_user_ids:
                 logger.info(f"👥 Allowed user IDs: {self.config.allowed_user_ids}")
             elif self.config.allowed_users:
                 logger.info(f"👥 Allowed usernames: {self.config.allowed_users}")
             else:
-                logger.info(f"👥 No user filtering configured - accepting all users")
+                logger.info("👥 No user filtering configured - accepting all users")
             
-            # Keep running until stopped with periodic health checks
-            health_check_counter = 0
+            # Keep running until stopped
             while self._running:
                 await asyncio.sleep(60)  # Check every minute
-                health_check_counter += 1
-                if health_check_counter % 5 == 0:  # Log every 5 minutes
-                    logger.info(f"🔄 Bot health check - running for {health_check_counter} minutes")
-                    if hasattr(self.application.updater, 'running'):
-                        logger.info(f"📡 Updater status: {self.application.updater.running}")
-                        
+            
         except Exception as e:
             logger.error(f"Error running Telegram client: {e}")
             raise
@@ -137,14 +126,20 @@ class TelegramClient:
             
              # Filter by chat IDs if specified
             if self.config.chat_ids and message.chat_id not in self.config.chat_ids:
-                logger.info(f"🚫 Ignoring message from chat {message.chat_id} ({chat_name}) - monitoring chats {self.config.chat_ids}")
+                logger.info(
+                    f"🚫 Ignoring message from chat {message.chat_id} ({chat_name}) - "
+                    f"monitoring chats {self.config.chat_ids}"
+                )
                 return
             
             # Filter by allowed user IDs if specified (priority over usernames)
             if self.config.allowed_user_ids and message.from_user:
                 user_id = message.from_user.id
                 if user_id not in self.config.allowed_user_ids:
-                    logger.info(f"🚫 Ignoring message from user ID {user_id} (not in allowed list: {self.config.allowed_user_ids})")
+                    logger.info(
+                        f"🚫 Ignoring message from user ID {user_id} "
+                        f"(not in allowed list: {self.config.allowed_user_ids})"
+                    )
                     return
                 else:
                     logger.info(f"✅ Message from allowed user ID {user_id}")
@@ -153,7 +148,10 @@ class TelegramClient:
             elif self.config.allowed_users and message.from_user:
                 username = message.from_user.username
                 if username not in self.config.allowed_users:
-                    logger.info(f"🚫 Ignoring message from user @{username} (not in allowed list: {self.config.allowed_users})")
+                    logger.info(
+                        f"🚫 Ignoring message from user @{username} "
+                        f"(not in allowed list: {self.config.allowed_users})"
+                    )
                     return
                 else:
                     logger.info(f"✅ Message from allowed user @{username}")
