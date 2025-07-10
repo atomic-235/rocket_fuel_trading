@@ -30,21 +30,28 @@ class HyperliquidExchange:
             logger.info(f"📍 Using wallet: {self.config.wallet_address}")
             logger.info(f"🧪 Testnet mode: {self.config.testnet}")
             
-            # Initialize CCXT exchange
+            # Create CCXT exchange instance with Hyperliquid configuration
             self.exchange = ccxt.hyperliquid({
-                'apiKey': self.config.private_key,
-                'secret': '',  # Not used by Hyperliquid
-                'sandbox': self.config.testnet,
-                'options': {
-                    'walletAddress': self.config.wallet_address,
-                }
+                'walletAddress': self.config.wallet_address,
+                'privateKey': self.config.private_key,
+                'timeout': self.config.timeout * 1000,  # CCXT uses milliseconds
+                'enableRateLimit': True,
+                'rateLimit': 1000 // self.config.rate_limit,  # Convert to ms per request
             })
+            
+            if self.config.testnet:
+                self.exchange.sandbox = True
             
             # Test connection
             logger.info("🔍 Testing Hyperliquid API connection...")
             await self._test_connection()
-            
             self._connected = True
+            
+            # Initialize symbol resolver
+            from ..utils.symbol_resolver import get_symbol_resolver
+            resolver = get_symbol_resolver()
+            resolver.set_exchange(self.exchange)
+            
             logger.info("✅ Hyperliquid exchange initialized successfully")
             
         except Exception as e:
@@ -163,10 +170,7 @@ class HyperliquidExchange:
                 
             order.metadata['exchange_response'] = result
             
-            logger.info(
-                f"📈 Order created: {order.id} - {order.side.value} "
-                f"{order.quantity} {order.symbol} @ {order.price}"
-            )
+            logger.info(f"📈 Order created: {order.id} - {order.side.value} {order.quantity} {order.symbol}")
             
             return order
             
@@ -352,7 +356,7 @@ class HyperliquidExchange:
                 if isinstance(amounts, dict) and 'free' in amounts:
                     formatted_balance[currency] = Decimal(str(amounts['free']))
             
-            logger.info("💰 Fetched account balance.")
+            logger.info("💰 Fetched account balance")
             return formatted_balance
             
         except Exception as e:
