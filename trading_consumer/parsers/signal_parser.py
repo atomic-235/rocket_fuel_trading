@@ -25,13 +25,22 @@ class SignalParser:
             if not content:
                 return None
             
-            logger.debug(f"Parsing JSON message: {content[:100]}...")
+            logger.info(f"📥 Processing message: {content[:200]}...")
+            
+            # Check if this looks like an error message (for informational logging only)
+            if "Pipeline Error" in content or "TLObject" in content:
+                logger.warning("🚨 Upstream service error detected in message")
+            elif content.startswith("❌") and ("Error:" in content or "Exception:" in content):
+                logger.warning("🚨 Error message format detected")
+            
+            # Always try to parse - don't filter anything out
+            logger.debug("📥 Attempting to parse as JSON...")
             
             # Parse JSON trade data from message analyzer
             return self._parse_from_json(content, message)
             
         except Exception as e:
-            logger.error(f"Error parsing message: {e}")
+            logger.error(f"❌ Error parsing message: {e}")
             return None
     
     def _parse_from_json(self, content: str, message: TelegramMessage) -> Optional[TradingSignal]:
@@ -44,45 +53,63 @@ class SignalParser:
             
             # Check if it has trade_extractions
             if not isinstance(data, dict) or 'trade_extractions' not in data:
+                logger.debug("📄 Valid JSON but no trade_extractions field found")
                 return None
             
             trade_extractions = data.get('trade_extractions', [])
             if not trade_extractions:
+                logger.debug("📄 JSON has trade_extractions but it's empty")
                 return None
             
             # Get the first trade extraction
             trade = trade_extractions[0]
             if not trade:
+                logger.debug("📄 Empty trade extraction found")
                 return None
             
-            # Extract signal type from direction
+            logger.info(f"🎯 Processing trade extraction: {trade.get('ticker', 'UNKNOWN')}")
+            
+            # Extract signal type from direction and trade_type
+            trade_type = trade.get('trade_type', '').lower()
             direction = trade.get('direction', '').lower()
-            if direction == 'long':
+            
+            if trade_type == 'close':
+                signal_type = SignalType.CLOSE
+                logger.info(f"🔄 Close signal detected for {trade.get('ticker', 'UNKNOWN')}")
+            elif direction == 'long':
                 signal_type = SignalType.BUY
             elif direction == 'short':
                 signal_type = SignalType.SELL
             else:
-                # Check trade_type for close signals
-                trade_type = trade.get('trade_type', '').lower()
-                if trade_type == 'close':
-                    signal_type = SignalType.CLOSE
-                else:
-                    logger.debug(f"Unknown direction/trade_type: {direction}/{trade_type}")
-                    return None
+                logger.debug(f"❓ Unknown direction/trade_type: {direction}/{trade_type}")
+                return None
             
             # Extract symbol (handle case properly)
             raw_symbol = trade.get('ticker', '').strip().upper()
             if not raw_symbol:
-                logger.warning("No ticker found in JSON trade data - skipping signal")
+                logger.warning("⚠️ No ticker found in JSON trade data - skipping signal")
                 return None
             
             # Store original symbol - resolution will happen at trade execution time
             symbol = raw_symbol
             
-            # Extract other fields
-            price = trade.get('entry_price')
-            if price is not None:
-                price = float(price)
+            # Extract price based on trade type
+            price = None
+            if trade_type == 'close':
+                # For close trades, look for exit_price
+                price = trade.get('exit_price')
+                if price is not None:
+                    price = float(price)
+                else:
+                    # If no exit_price, log close percentage for info
+                    close_pct = trade.get('close_percentage')
+                    if close_pct:
+                        logger.info(f"📊 Closing {close_pct}% of {symbol} position")
+            else:
+                # For open trades, look for entry_price
+                price = trade.get('entry_price')
+                if price is not None:
+                    price = float(price)
             
             stop_loss = trade.get('stop_loss')
             if stop_loss is not None:
@@ -124,18 +151,28 @@ class SignalParser:
                     "asset_name": trade.get('asset_name'),
                     "original_symbol": raw_symbol,
                     "symbol_needs_resolution": True,  # Flag for later resolution
+                    "close_percentage": trade.get('close_percentage'),  # Store for close trades
                 }
             )
             
-            logger.info(
-                f"🎯 Extracted signal from JSON: {signal.signal_type.value} {signal.symbol} "
-                f"(confidence: {signal.confidence:.2f})"
-            )
+            # Enhanced logging based on signal type
+            if signal_type == SignalType.CLOSE:
+                price_info = f"@ ${price}" if price else "market price"
+                logger.info(
+                    f"✅ Extracted CLOSE signal: {signal.symbol} {price_info} "
+                    f"(confidence: {signal.confidence:.2f})"
+                )
+            else:
+                price_info = f"@ ${price}" if price else "market price"
+                logger.info(
+                    f"✅ Extracted {signal.signal_type.value.upper()} signal: {signal.symbol} "
+                    f"{price_info} (confidence: {signal.confidence:.2f})"
+                )
             
             return signal
             
         except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
-            logger.debug(f"Not valid JSON trade data: {e}")
+            logger.debug(f"📄 Not valid JSON trade data (normal for text messages): {str(e)[:100]}")
             return None
 
 # All text parsing methods removed - only JSON parsing is used 

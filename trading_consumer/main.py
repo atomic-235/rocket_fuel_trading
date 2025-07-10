@@ -157,8 +157,10 @@ class TradingConsumer:
             signal = self.signal_parser.parse_message(message)
             
             if not signal:
-                logger.debug("No trading signal found in message")
+                logger.debug("📄 No trading signal found in message")
                 return
+            
+            logger.info("🎯 Valid trading signal found!")
             
             # Check confidence threshold
             if signal.confidence < self.config.trading.min_confidence:
@@ -173,7 +175,7 @@ class TradingConsumer:
             
         except Exception as e:
             logger.error(f"❌ Error handling message: {e}")
-    
+            
     def _cleanup_old_trades(self) -> None:
         """Remove trades older than the deduplication window."""
         cutoff_time = datetime.now() - self._trade_dedupe_window

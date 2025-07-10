@@ -26,41 +26,39 @@ class HyperliquidExchange:
     async def initialize(self) -> None:
         """Initialize the exchange connection."""
         try:
-            # Create CCXT exchange instance with Hyperliquid configuration
+            logger.info("🔗 Initializing Hyperliquid exchange connection...")
+            logger.info(f"📍 Using wallet: {self.config.wallet_address}")
+            logger.info(f"🧪 Testnet mode: {self.config.testnet}")
+            
+            # Initialize CCXT exchange
             self.exchange = ccxt.hyperliquid({
-                'walletAddress': self.config.wallet_address,
-                'privateKey': self.config.private_key,
-                'timeout': self.config.timeout * 1000,  # CCXT uses milliseconds
-                'enableRateLimit': True,
-                'rateLimit': 1000 // self.config.rate_limit,  # Convert to ms per request
+                'apiKey': self.config.private_key,
+                'secret': '',  # Not used by Hyperliquid
+                'sandbox': self.config.testnet,
+                'options': {
+                    'walletAddress': self.config.wallet_address,
+                }
             })
             
-            if self.config.testnet:
-                self.exchange.sandbox = True
-            
             # Test connection
+            logger.info("🔍 Testing Hyperliquid API connection...")
             await self._test_connection()
+            
             self._connected = True
-            
-            # Initialize symbol resolver
-            from ..utils.symbol_resolver import get_symbol_resolver
-            resolver = get_symbol_resolver()
-            resolver.set_exchange(self.exchange)
-            
-            logger.info("Hyperliquid exchange initialized successfully")
+            logger.info("✅ Hyperliquid exchange initialized successfully")
             
         except Exception as e:
-            logger.error(f"Failed to initialize Hyperliquid exchange: {e}")
+            logger.error(f"❌ Failed to initialize Hyperliquid exchange: {e}")
             raise
     
     async def _test_connection(self) -> None:
-        """Test exchange connection."""
+        """Test the exchange connection."""
         try:
-            # Test with a simple API call
-            balance = self.exchange.fetch_balance()
-            logger.info("Exchange connection test successful")
+            logger.info("🔄 Testing Hyperliquid API connection...")
+            self.exchange.fetch_balance()
+            logger.info("✅ Hyperliquid API connection test successful")
         except Exception as e:
-            logger.error(f"Exchange connection test failed: {e}")
+            logger.error(f"❌ Hyperliquid API connection test failed: {e}")
             raise
     
     async def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> bool:
@@ -71,18 +69,27 @@ class HyperliquidExchange:
         try:
             symbol_formatted = f"{symbol}/USDC:USDC"
             
+            logger.info(f"⚡ Setting {leverage}x leverage for {symbol}...")
+            
             # Set leverage (following user's example)
             self.exchange.set_leverage(leverage, symbol_formatted)
             
             # Optionally set margin mode
             if margin_mode == "isolated":
-                self.exchange.set_leverage(leverage, symbol_formatted, params={"marginMode": "isolated"})
+                logger.info(f"🔒 Setting isolated margin mode for {symbol}")
+                self.exchange.set_leverage(
+                    leverage, 
+                    symbol_formatted, 
+                    params={"marginMode": "isolated"}
+                )
             
-            logger.info(f"Leverage set to {leverage}x for {symbol} with {margin_mode} margin")
+            logger.info(
+                f"✅ Leverage set to {leverage}x for {symbol} with {margin_mode} margin"
+            )
             return True
             
         except Exception as e:
-            logger.error(f"Failed to set leverage: {e}")
+            logger.error(f"❌ Failed to set leverage for {symbol}: {e}")
             return False
     
     @retry(
@@ -136,7 +143,10 @@ class HyperliquidExchange:
             
             # Safe decimal conversions with error handling
             try:
-                order.average_price = Decimal(str(result.get('average', 0))) if result.get('average') is not None else None
+                avg_price = result.get('average', 0)
+                order.average_price = (
+                    Decimal(str(avg_price)) if avg_price is not None else None
+                )
             except (ValueError, TypeError, decimal.InvalidOperation):
                 order.average_price = None
                 
@@ -153,12 +163,15 @@ class HyperliquidExchange:
                 
             order.metadata['exchange_response'] = result
             
-            logger.info(f"Order created: {order.id} - {order.side.value} {order.quantity} {order.symbol}")
+            logger.info(
+                f"📈 Order created: {order.id} - {order.side.value} "
+                f"{order.quantity} {order.symbol} @ {order.price}"
+            )
             
             return order
             
         except Exception as e:
-            logger.error(f"Failed to create order: {e}")
+            logger.error(f"❌ Failed to create order: {e}")
             order.status = OrderStatus.REJECTED
             order.metadata['error'] = str(e)
             raise
@@ -339,6 +352,7 @@ class HyperliquidExchange:
                 if isinstance(amounts, dict) and 'free' in amounts:
                     formatted_balance[currency] = Decimal(str(amounts['free']))
             
+            logger.info("💰 Fetched account balance.")
             return formatted_balance
             
         except Exception as e:
@@ -381,6 +395,7 @@ class HyperliquidExchange:
                     )
                     formatted_positions.append(position)
             
+            logger.info(f"📊 Fetched {len(formatted_positions)} open positions.")
             return formatted_positions
             
         except Exception as e:
