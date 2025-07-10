@@ -62,13 +62,13 @@ trading_consumer/
 
 ### Installation
 
-#### Option 1: From GitHub Release (Recommended)
+#### Option 1: From GitHub Main Branch (Recommended)
 ```bash
-# Install latest release directly
-pip install https://github.com/atomic-235/rocket_fuel_trading/archive/refs/tags/v0.1.3.tar.gz
+# Install latest from main branch directly
+pip install https://github.com/atomic-235/rocket_fuel_trading/archive/refs/heads/main.tar.gz
 
 # Or install with development dependencies
-pip install "https://github.com/atomic-235/rocket_fuel_trading/archive/refs/tags/v0.1.3.tar.gz[dev]"
+pip install "https://github.com/atomic-235/rocket_fuel_trading/archive/refs/heads/main.tar.gz[dev]"
 ```
 
 #### Option 2: From Source
@@ -131,9 +131,9 @@ For quick deployment on any Amazon Linux 2023 system:
 
 ```bash
 sudo dnf update -y && sudo dnf install -y python3 python3-pip wget tar && \
-wget https://github.com/atomic-235/rocket_fuel_trading/archive/refs/tags/v0.1.3.tar.gz && \
-tar -xzf v0.1.3.tar.gz && \
-cd rocket_fuel_trading-0.1.3 && \
+wget https://github.com/atomic-235/rocket_fuel_trading/archive/refs/heads/main.tar.gz && \
+tar -xzf main.tar.gz && \
+cd rocket_fuel_trading-main && \
 python3 -m venv trading_env && \
 ./trading_env/bin/pip install -e . && \
 mv env.example .env && \
@@ -153,10 +153,10 @@ nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
 
 **Check logs after setup:**
 ```bash
-tail -f rocket_fuel_trading-0.1.3/trading.log
+tail -f rocket_fuel_trading-main/trading.log
 ```
 
-> **Note**: Replace `v0.1.3` with the latest release version from [GitHub Releases](https://github.com/atomic-235/rocket_fuel_trading/releases)
+> **Note**: Using main branch ensures you get the latest fixes and features
 
 This will:
 - Install all dependencies and create a virtual environment
@@ -182,13 +182,13 @@ Replace the values:
 ps aux | grep trading_consumer
 
 # View logs in real-time
-tail -f rocket_fuel_trading-0.1.3/trading.log
+tail -f rocket_fuel_trading-main/trading.log
 
 # Stop the process
 pkill -f trading_consumer.main
 
-# Restart the service (from rocket_fuel_trading-0.1.3 directory)
-cd rocket_fuel_trading-0.1.3 && \
+# Restart the service (from rocket_fuel_trading-main directory)
+cd rocket_fuel_trading-main && \
 nohup env TELEGRAM_BOT_TOKEN="your_bot_token" \
           TELEGRAM_CHAT_IDS="your_chat_ids" \
           OWNER_TELEGRAM_ID="your_telegram_id" \
