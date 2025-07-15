@@ -111,7 +111,7 @@ class HyperliquidExchange:
         try:
             symbol = f"{order.symbol}/USDC:USDC"
             
-            # Load markets to get current price
+            # Load markets to get current price (for logging/metadata only)
             markets = self.exchange.load_markets()
             current_price = float(markets[symbol]["info"]["midPx"])
             
@@ -124,23 +124,29 @@ class HyperliquidExchange:
             }
             side = side_map.get(order.side, 'buy')
             
-            # Create the order (following user's examples)
+            # Create the order (fixed market order implementation)
             if order.order_type.value == 'market':
+                # Market orders should NOT have a price parameter
                 result = self.exchange.create_order(
                     symbol=symbol,
                     type='market',
                     side=side,
-                    amount=float(order.quantity),
-                    price=current_price
+                    amount=float(order.quantity)
+                    # NO price parameter for market orders!
+                )
+                logger.info(
+                    f"🚀 Market order created at current market price (~${current_price:.4f})"
                 )
             elif order.order_type.value == 'limit':
+                limit_price = float(order.price) if order.price else current_price
                 result = self.exchange.create_order(
                     symbol=symbol,
                     type='limit',
                     side=side,
                     amount=float(order.quantity),
-                    price=float(order.price) if order.price else current_price
+                    price=limit_price
                 )
+                logger.info(f"📌 Limit order created at ${limit_price:.4f}")
             else:
                 raise ValueError(f"Unsupported order type: {order.order_type}")
             

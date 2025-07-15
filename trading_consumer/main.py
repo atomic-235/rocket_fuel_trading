@@ -565,17 +565,40 @@ class TradingConsumer:
             if not self.telegram_client:
                 return
             
+            # Sanitize error message for HTML parsing
+            # Remove any HTML-like tags that might cause parsing issues
+            import re
+            sanitized_error = re.sub(r'<[^>]+>', '', str(error_message))
+            # Also escape any remaining HTML characters
+            sanitized_error = (sanitized_error
+                                  .replace('&', '&amp;')
+                                  .replace('<', '&lt;')
+                                  .replace('>', '&gt;')
+                                  .replace('"', '&quot;')
+                                  .replace("'", '&#x27;'))
+            
             message = (
                 f"❌ <b>Trade Failed</b>\n\n"
                 f"🎯 <b>Signal:</b> {signal.signal_type.value} {signal.symbol}\n"
                 f"📈 <b>Confidence:</b> {signal.confidence:.2f}\n"
-                f"💥 <b>Error:</b> {error_message}"
+                f"💥 <b>Error:</b> {sanitized_error[:200]}..."
             )
             
             await self.telegram_client.send_owner_notification(message)
             
         except Exception as e:
             logger.error(f"Failed to send failure notification: {e}")
+            # Try sending a simple notification without the problematic error details
+            try:
+                simple_message = (
+                    f"❌ <b>Trade Failed</b>\n\n"
+                    f"🎯 <b>Signal:</b> {signal.signal_type.value} {signal.symbol}\n"
+                    f"📈 <b>Confidence:</b> {signal.confidence:.2f}\n"
+                    f"💥 <b>Error:</b> Order execution failed (see logs for details)"
+                )
+                await self.telegram_client.send_owner_notification(simple_message)
+            except Exception as e2:
+                logger.error(f"Failed to send simple failure notification: {e2}")
     
     async def _notify_owner_trade_success(self, signal: TradingSignal, result, tp_price: float, sl_price: float) -> None:
         """Notify owner about successful trade."""
