@@ -57,6 +57,12 @@ class TradingSignal(BaseModel):
         """Validate trading symbol format."""
         if not v or len(v) < 2:
             raise ValueError("Symbol must be at least 2 characters")
+        
+        # If it's already properly formatted k-token (from resolver), leave it alone
+        if v.startswith('k') and len(v) > 1 and v[1:].isupper():
+            return v
+        
+        # Otherwise uppercase normal tokens
         return v.upper()
     
     @field_validator('price', 'stop_loss', 'take_profit')
@@ -93,6 +99,11 @@ class TradeOrder(BaseModel):
     @classmethod
     def validate_symbol(cls, v):
         """Validate trading symbol format."""
+        # If it's already properly formatted k-token (from resolver), leave it alone
+        if v.startswith('k') and len(v) > 1 and v[1:].isupper():
+            return v
+        
+        # Otherwise uppercase normal tokens
         return v.upper()
     
     @property
@@ -127,6 +138,11 @@ class Position(BaseModel):
     @classmethod
     def validate_symbol(cls, v):
         """Validate trading symbol format."""
+        # If it's already properly formatted k-token (from resolver), leave it alone
+        if v.startswith('k') and len(v) > 1 and v[1:].isupper():
+            return v
+        
+        # Otherwise uppercase normal tokens
         return v.upper()
     
     @property

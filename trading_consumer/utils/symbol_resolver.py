@@ -27,7 +27,9 @@ class SymbolResolver:
             return set()
         
         try:
+            logger.debug("🔍 Loading markets from exchange...")
             markets = self.exchange.load_markets()
+            logger.debug(f"📊 Found {len(markets)} total markets")
             
             # Extract symbols (remove /USDC:USDC suffix)
             symbols = set()
@@ -35,6 +37,15 @@ class SymbolResolver:
                 if '/USDC:USDC' in market_symbol:
                     symbol = market_symbol.split('/')[0]
                     symbols.add(symbol)
+            
+            logger.debug(f"✅ Extracted {len(symbols)} perpetual symbols")
+            
+            # Log PEPE-related symbols for debugging
+            pepe_symbols = [s for s in symbols if 'PEPE' in s.upper()]
+            if pepe_symbols:
+                logger.info(f"🐸 PEPE-related symbols found: {pepe_symbols}")
+            else:
+                logger.warning("⚠️ No PEPE-related symbols found in markets")
             
             self._available_symbols = symbols
             return symbols
@@ -56,6 +67,7 @@ class SymbolResolver:
             return None
         
         symbol = symbol.upper().strip()
+        logger.info(f"🔍 Resolving symbol: {symbol}")
         
         # Get available symbols (fresh each time - no caching due to new coins)
         available_symbols = await self.get_available_symbols()
@@ -64,9 +76,11 @@ class SymbolResolver:
             logger.warning(f"⚠️ Could not get symbols, returning original: {symbol}")
             return symbol
         
+        logger.debug(f"📋 Checking against {len(available_symbols)} available symbols")
+        
         # Step 1: Check if original symbol exists
         if symbol in available_symbols:
-            logger.debug(f"✅ Symbol exists as-is: {symbol}")
+            logger.info(f"✅ Symbol exists as-is: {symbol}")
             return symbol
         
         # Step 2: Check if k-prefixed version exists
@@ -75,8 +89,9 @@ class SymbolResolver:
             logger.info(f"🔄 Mapped symbol {symbol} → {k_symbol}")
             return k_symbol
         
-        # Step 3: Symbol not found
+        # Step 3: Symbol not found - log available symbols for debugging
         logger.warning(f"❌ Symbol not found: {symbol} (checked {symbol} and {k_symbol})")
+        logger.debug(f"🔍 Available symbols: {sorted(list(available_symbols))[:20]}...")  # Show first 20
         return None
     
     async def symbol_exists(self, symbol: str) -> bool:
