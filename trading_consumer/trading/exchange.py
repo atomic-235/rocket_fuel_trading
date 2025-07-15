@@ -37,6 +37,10 @@ class HyperliquidExchange:
                 'timeout': self.config.timeout * 1000,  # CCXT uses milliseconds
                 'enableRateLimit': True,
                 'rateLimit': 1000 // self.config.rate_limit,  # Convert to ms per request
+                'options': {
+                    'defaultSlippage': 0.05,  # 5% default slippage protection
+                    'slippage': 0.05  # Alternative key
+                }
             })
             
             if self.config.testnet:
@@ -124,19 +128,17 @@ class HyperliquidExchange:
             }
             side = side_map.get(order.side, 'buy')
             
-            # Create the order (fixed market order implementation)
+            # Create the order - Hyperliquid requires price for market orders (slippage calc)
             if order.order_type.value == 'market':
-                # Market orders should NOT have a price parameter
+                # Market orders need price for slippage calculation on Hyperliquid
                 result = self.exchange.create_order(
                     symbol=symbol,
                     type='market',
                     side=side,
-                    amount=float(order.quantity)
-                    # NO price parameter for market orders!
+                    amount=float(order.quantity),
+                    price=current_price  # Required for slippage calculation
                 )
-                logger.info(
-                    f"🚀 Market order created at current market price (~${current_price:.4f})"
-                )
+                logger.info(f"🚀 Market order created at ~${current_price:.4f}")
             elif order.order_type.value == 'limit':
                 limit_price = float(order.price) if order.price else current_price
                 result = self.exchange.create_order(
