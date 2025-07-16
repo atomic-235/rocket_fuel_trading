@@ -329,10 +329,8 @@ class TradingConsumer:
             logger.info(f"   📈 Take Profit: ${tp_price:,.2f} (+{((tp_price/entry_price)-1)*100:.1f}%)")
             logger.info(f"   📉 Stop Loss: ${sl_price:,.2f} ({((sl_price/entry_price)-1)*100:.1f}%)")
             
-            # Create market buy order
-            logger.info("🚀 Creating market BUY order...")
-            
             # If signal has a specific price, check if it's close to market price
+            limit_order_price = None
             if signal.price:
                 signal_price = float(signal.price)
                 price_diff_pct = abs(current_price - signal_price) / signal_price
@@ -340,13 +338,18 @@ class TradingConsumer:
                 if price_diff_pct <= 0.05:  # Within 5%
                     logger.info(
                         f"📊 Signal price ${signal_price:.3f} within 5% of market ${current_price:.3f} "
-                        f"({price_diff_pct*100:.1f}% diff) - using market price"
+                        f"({price_diff_pct*100:.1f}% diff) - will use market price for orders"
                     )
+                    limit_order_price = current_price  # Use market price for limit order too
                 else:
                     logger.info(
                         f"📊 Signal price ${signal_price:.3f} differs {price_diff_pct*100:.1f}% from market "
-                        f"${current_price:.3f} - will try market first, then limit if needed"
+                        f"${current_price:.3f} - will use signal price for limit fallback"
                     )
+                    limit_order_price = signal_price  # Use signal price for limit order
+            
+            # Create market buy order
+            logger.info("🚀 Creating market BUY order...")
             
             market_order = TradeOrder(
                 symbol=symbol,
@@ -363,27 +366,27 @@ class TradingConsumer:
             except Exception as market_error:
                 logger.warning(f"⚠️ Market order failed: {market_error}")
                 
-                # If signal has specific price and market order failed, try limit order
-                if signal.price:
-                    signal_price = float(signal.price)
-                    logger.info(f"🔄 Trying limit order at signal price ${signal_price:.3f}")
+                # Try limit order fallback if we have a price
+                if limit_order_price is not None:
+                    logger.info(f"🔄 Trying limit order at ${limit_order_price:.3f}")
                     
                     limit_order = TradeOrder(
                         symbol=symbol,
                         side=SignalType.BUY,
                         order_type=OrderType.LIMIT,
                         quantity=quantity,
-                        price=Decimal(str(signal_price))
+                        price=Decimal(str(limit_order_price))
                     )
                     
                     try:
                         result = await self.exchange.create_order(limit_order)
-                        logger.info(f"✅ Limit order created: {result.id} @ ${signal_price:.3f}")
+                        logger.info(f"✅ Limit order created: {result.id} @ ${limit_order_price:.3f}")
                     except Exception as limit_error:
                         logger.error(f"❌ Both market and limit orders failed: {limit_error}")
                         raise limit_error
                 else:
                     # No signal price to fall back to, re-raise market order error
+                    logger.error("❌ No limit order fallback available (no signal price)")
                     raise market_error
             
             # Order execution successful - continue with TP/SL and notifications
