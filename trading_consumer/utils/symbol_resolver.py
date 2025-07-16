@@ -40,13 +40,6 @@ class SymbolResolver:
             
             logger.debug(f"✅ Extracted {len(symbols)} perpetual symbols")
             
-            # Log PEPE-related symbols for debugging
-            pepe_symbols = [s for s in symbols if 'PEPE' in s.upper()]
-            if pepe_symbols:
-                logger.info(f"🐸 PEPE-related symbols found: {pepe_symbols}")
-            else:
-                logger.warning("⚠️ No PEPE-related symbols found in markets")
-            
             self._available_symbols = symbols
             return symbols
             

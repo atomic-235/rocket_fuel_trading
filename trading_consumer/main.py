@@ -17,6 +17,7 @@ from .trading import HyperliquidExchange
 from .models.telegram import TelegramMessage
 from .models.trading import TradingSignal, TradeOrder, OrderType, SignalType
 from .utils.symbol_resolver import resolve_symbol_for_trading
+from decimal import Decimal
 
 
 class RecentTrade:
@@ -329,7 +330,23 @@ class TradingConsumer:
             logger.info(f"   📉 Stop Loss: ${sl_price:,.2f} ({((sl_price/entry_price)-1)*100:.1f}%)")
             
             # Create market buy order
-            logger.info(f"🚀 Creating market BUY order...")
+            logger.info("🚀 Creating market BUY order...")
+            
+            # If signal has a specific price, check if it's close to market price
+            if signal.price:
+                signal_price = float(signal.price)
+                price_diff_pct = abs(current_price - signal_price) / signal_price
+                
+                if price_diff_pct <= 0.05:  # Within 5%
+                    logger.info(
+                        f"📊 Signal price ${signal_price:.3f} within 5% of market ${current_price:.3f} "
+                        f"({price_diff_pct*100:.1f}% diff) - using market price"
+                    )
+                else:
+                    logger.info(
+                        f"📊 Signal price ${signal_price:.3f} differs {price_diff_pct*100:.1f}% from market "
+                        f"${current_price:.3f} - will try market first, then limit if needed"
+                    )
             
             market_order = TradeOrder(
                 symbol=symbol,
@@ -338,15 +355,44 @@ class TradingConsumer:
                 quantity=quantity
             )
             
-            result = await self.exchange.create_order(market_order)
-            
-            if result and result.id:
+            # Try market order first
+            try:
+                result = await self.exchange.create_order(market_order)
                 logger.info(f"✅ Market order created: {result.id}")
-                logger.info(f"   Status: {result.status.value}")
-                logger.info(f"   Filled: {result.filled_quantity}")
+                
+            except Exception as market_error:
+                logger.warning(f"⚠️ Market order failed: {market_error}")
+                
+                # If signal has specific price and market order failed, try limit order
+                if signal.price:
+                    signal_price = float(signal.price)
+                    logger.info(f"🔄 Trying limit order at signal price ${signal_price:.3f}")
+                    
+                    limit_order = TradeOrder(
+                        symbol=symbol,
+                        side=SignalType.BUY,
+                        order_type=OrderType.LIMIT,
+                        quantity=quantity,
+                        price=Decimal(str(signal_price))
+                    )
+                    
+                    try:
+                        result = await self.exchange.create_order(limit_order)
+                        logger.info(f"✅ Limit order created: {result.id} @ ${signal_price:.3f}")
+                    except Exception as limit_error:
+                        logger.error(f"❌ Both market and limit orders failed: {limit_error}")
+                        raise limit_error
+                else:
+                    # No signal price to fall back to, re-raise market order error
+                    raise market_error
+            
+            # Order execution successful - continue with TP/SL and notifications
+            if result and result.id:
+                logger.info(f"📋 Order Status: {result.status.value}")
+                logger.info(f"📊 Filled: {result.filled_quantity}")
                 
                 # Create TP/SL orders
-                logger.info(f"🎯 Creating TP/SL orders...")
+                logger.info("🎯 Creating TP/SL orders...")
                 
                 tp_sl_orders = await self.exchange.create_tp_sl_orders(
                     symbol=symbol,
