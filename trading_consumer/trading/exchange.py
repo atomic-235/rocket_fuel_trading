@@ -141,6 +141,11 @@ class HyperliquidExchange:
                 params['vaultAddress'] = self.config.vault_address
                 logger.debug(f"🏦 Trading on behalf of vault/subaccount: {self.config.vault_address}")
             
+            # Add leverage to params if specified in order
+            if order.leverage:
+                params['leverage'] = order.leverage
+                logger.debug(f"⚡ Using {order.leverage}x leverage for order")
+            
             if order.order_type.value == 'market':
                 # Market orders need price for slippage calculation on Hyperliquid
                 result = self.exchange.create_order(

@@ -355,7 +355,8 @@ class TradingConsumer:
                 symbol=symbol,
                 side=SignalType.BUY,
                 order_type=OrderType.MARKET,
-                quantity=quantity
+                quantity=quantity,
+                leverage=leverage
             )
             
             # Try market order first
@@ -375,7 +376,8 @@ class TradingConsumer:
                         side=SignalType.BUY,
                         order_type=OrderType.LIMIT,
                         quantity=quantity,
-                        price=Decimal(str(limit_order_price))
+                        price=Decimal(str(limit_order_price)),
+                        leverage=leverage
                     )
                     
                     try:
@@ -487,7 +489,8 @@ class TradingConsumer:
                 symbol=symbol,
                 side=SignalType.SELL,
                 order_type=OrderType.MARKET,
-                quantity=quantity
+                quantity=quantity,
+                leverage=leverage
             )
             
             result = await self.exchange.create_order(market_order)
