@@ -30,6 +30,13 @@ class HyperliquidExchange:
             logger.info(f"📍 Using wallet: {self.config.wallet_address}")
             logger.info(f"🧪 Testnet mode: {self.config.testnet}")
             
+            # Log vault address if configured
+            if self.config.vault_address:
+                logger.info(f"🏦 Vault/Subaccount address: {self.config.vault_address}")
+                logger.info("📋 All trades will be executed on behalf of the vault/subaccount")
+            else:
+                logger.info("👤 Trading with main wallet address (no vault configured)")
+            
             # Create CCXT exchange instance with Hyperliquid configuration
             self.exchange = ccxt.hyperliquid({
                 'walletAddress': self.config.wallet_address,
@@ -129,6 +136,11 @@ class HyperliquidExchange:
             side = side_map.get(order.side, 'buy')
             
             # Create the order - Hyperliquid requires price for market orders (slippage calc)
+            params = {}
+            if self.config.vault_address:
+                params['vaultAddress'] = self.config.vault_address
+                logger.debug(f"🏦 Trading on behalf of vault/subaccount: {self.config.vault_address}")
+            
             if order.order_type.value == 'market':
                 # Market orders need price for slippage calculation on Hyperliquid
                 result = self.exchange.create_order(
@@ -136,7 +148,8 @@ class HyperliquidExchange:
                     type='market',
                     side=side,
                     amount=float(order.quantity),
-                    price=current_price  # Required for slippage calculation
+                    price=current_price,  # Required for slippage calculation
+                    params=params
                 )
                 logger.info(f"🚀 Market order created at ~${current_price:.4f}")
             elif order.order_type.value == 'limit':
@@ -146,7 +159,8 @@ class HyperliquidExchange:
                     type='limit',
                     side=side,
                     amount=float(order.quantity),
-                    price=limit_price
+                    price=limit_price,
+                    params=params
                 )
                 logger.info(f"📌 Limit order created at ${limit_price:.4f}")
             else:
@@ -196,6 +210,11 @@ class HyperliquidExchange:
         orders = []
         symbol_formatted = f"{symbol}/USDC:USDC"
         
+        # Setup params for vault trading
+        params = {}
+        if self.config.vault_address:
+            params['vaultAddress'] = self.config.vault_address
+        
         try:
             # Wait for position to be established (retry up to 10 times)
             position_found = False
@@ -203,7 +222,11 @@ class HyperliquidExchange:
             
             for attempt in range(10):
                 try:
-                    positions = self.exchange.fetch_positions([symbol_formatted], params={"user": self.config.wallet_address})
+                    position_params = {"user": self.config.wallet_address}
+                    if self.config.vault_address:
+                        position_params["user"] = self.config.vault_address  # Check vault positions
+                    
+                    positions = self.exchange.fetch_positions([symbol_formatted], params=position_params)
                     if positions and positions[0].get('contracts', 0) != 0:
                         position_size = abs(positions[0]['contracts'])
                         position_found = True
@@ -232,7 +255,7 @@ class HyperliquidExchange:
                         side='sell',
                         amount=position_size,
                         price=current_price,
-                        params={'takeProfitPrice': tp_price, 'reduceOnly': True}
+                        params={**params, 'takeProfitPrice': tp_price, 'reduceOnly': True}
                     )
                     orders.append(tp_order)
                     logger.info(f"TP order created: {tp_order['id']} @ {tp_price}")
@@ -246,7 +269,7 @@ class HyperliquidExchange:
                             side='sell',
                             amount=position_size,
                             price=tp_price,
-                            params={'reduceOnly': True}
+                            params={**params, 'reduceOnly': True}
                         )
                         orders.append(tp_order_alt)
                         logger.info(f"Alternative TP order created: {tp_order_alt['id']} @ {tp_price}")
@@ -262,7 +285,7 @@ class HyperliquidExchange:
                         side='sell',
                         amount=position_size,
                         price=current_price,
-                        params={'stopLossPrice': sl_price, 'reduceOnly': True}
+                        params={**params, 'stopLossPrice': sl_price, 'reduceOnly': True}
                     )
                     orders.append(sl_order)
                     logger.info(f"SL order created: {sl_order['id']} @ {sl_price}")
@@ -276,7 +299,7 @@ class HyperliquidExchange:
                             side='sell',
                             amount=position_size,
                             price=None,
-                            params={'stopPrice': sl_price, 'reduceOnly': True}
+                            params={**params, 'stopPrice': sl_price, 'reduceOnly': True}
                         )
                         orders.append(sl_order_alt)
                         logger.info(f"Alternative SL order created: {sl_order_alt['id']} @ {sl_price}")
@@ -297,9 +320,18 @@ class HyperliquidExchange:
         try:
             symbol_formatted = f"{symbol}/USDC:USDC"
             
+            # Setup params for vault trading
+            params = {}
+            if self.config.vault_address:
+                params['vaultAddress'] = self.config.vault_address
+            
             # Get position size if not provided
             if position_size is None:
-                positions = self.exchange.fetch_positions([symbol_formatted], params={"user": self.config.wallet_address})
+                position_params = {"user": self.config.wallet_address}
+                if self.config.vault_address:
+                    position_params["user"] = self.config.vault_address
+                    
+                positions = self.exchange.fetch_positions([symbol_formatted], params=position_params)
                 if not positions or positions[0].get('contracts', 0) == 0:
                     raise ValueError(f"No position found for {symbol}")
                 position_size = abs(positions[0]['contracts'])
@@ -315,7 +347,7 @@ class HyperliquidExchange:
                 side='sell',
                 amount=position_size,
                 price=current_price,
-                params={'reduceOnly': True}
+                params={**params, 'reduceOnly': True}
             )
             
             logger.info(f"Position closed: {result['id']} - {position_size} {symbol}")

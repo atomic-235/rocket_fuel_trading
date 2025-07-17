@@ -40,6 +40,7 @@ class HyperliquidConfig(BaseModel):
     
     wallet_address: str = Field(..., min_length=1)
     private_key: str = Field(..., min_length=1)
+    vault_address: Optional[str] = Field(default=None, description="Vault/subaccount address for trading")
     testnet: bool = Field(default=True)
     sandbox: bool = Field(default=False)
     timeout: int = Field(default=30, ge=5)
@@ -51,6 +52,14 @@ class HyperliquidConfig(BaseModel):
         """Validate API credentials."""
         if not v or len(v) < 10:
             raise ValueError("Invalid API credentials")
+        return v
+    
+    @field_validator('vault_address')
+    @classmethod
+    def validate_vault_address(cls, v):
+        """Validate vault address format."""
+        if v is not None and (not v.startswith('0x') or len(v) != 42):
+            raise ValueError("Vault address must be a valid 42-character hex address starting with 0x")
         return v
 
 

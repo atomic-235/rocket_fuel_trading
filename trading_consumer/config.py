@@ -43,6 +43,7 @@ def load_config(env_file: Optional[str] = None) -> AppConfig:
         hyperliquid_config = HyperliquidConfig(
             wallet_address=os.getenv("HYPERLIQUID_API_ADDRESS", ""),
             private_key=os.getenv("HYPERLIQUID_API_KEY", ""),
+            vault_address=os.getenv("HYPERLIQUID_VAULT_ADDRESS"),  # Optional vault address
             testnet=_parse_bool(os.getenv("HYPERLIQUID_TESTNET", "true")),
             sandbox=_parse_bool(os.getenv("HYPERLIQUID_SANDBOX", "false")),
             timeout=int(os.getenv("HYPERLIQUID_TIMEOUT", "30")),
