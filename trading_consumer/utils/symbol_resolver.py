@@ -45,11 +45,11 @@ class SymbolResolver:
                 # Show k-prefixed tokens for reference
                 k_symbols = [s for s in symbols if s.startswith('k')]
                 if k_symbols:
-                    logger.debug(f"🔍 Available k-tokens: {sorted(k_symbols)[:10]}...")
+                    logger.info(f"🔍 Available k-tokens: {sorted(k_symbols)[:10]}...")
                 
                 # Show sample of all symbols
                 sample_symbols = sorted(list(symbols))[:15]
-                logger.debug(f"🔍 Sample symbols: {sample_symbols}")
+                logger.info(f"🔍 Sample symbols: {sample_symbols}")
             else:
                 logger.warning("⚠️ No symbols extracted from markets!")
             
