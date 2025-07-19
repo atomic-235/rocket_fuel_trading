@@ -31,6 +31,13 @@ class SymbolResolver:
             markets = self.exchange.load_markets()
             logger.debug(f"📊 Found {len(markets)} total markets")
             
+            # Look for k-markets specifically in raw markets
+            k_markets = [m for m in markets.keys() if m.startswith('k') and '/USDC:USDC' in m]
+            if k_markets:
+                logger.info(f"🔍 Raw k-markets found: {k_markets[:5]}...")
+            else:
+                logger.warning("⚠️ No k-markets found in raw markets!")
+            
             # Extract symbols (remove /USDC:USDC suffix)
             symbols = set()
             for market_symbol in markets.keys():
