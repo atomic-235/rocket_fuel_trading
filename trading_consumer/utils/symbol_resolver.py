@@ -31,8 +31,8 @@ class SymbolResolver:
             markets = self.exchange.load_markets()
             logger.debug(f"📊 Found {len(markets)} total markets")
             
-            # Look for k-markets specifically in raw markets
-            k_markets = [m for m in markets.keys() if m.startswith('k') and '/USDC:USDC' in m]
+            # Look for k-markets specifically in raw markets (case insensitive)
+            k_markets = [m for m in markets.keys() if m.upper().startswith('K') and '/USDC:USDC' in m]
             if k_markets:
                 logger.info(f"🔍 Raw k-markets found: {k_markets[:5]}...")
             else:
@@ -99,14 +99,19 @@ class SymbolResolver:
             logger.info(f"✅ Symbol exists as-is: {symbol}")
             return symbol
         
-        # Step 2: Check if k-prefixed version exists
-        k_symbol = f"k{symbol}"
-        if k_symbol in available_symbols:
-            logger.info(f"🔄 Mapped symbol {symbol} → {k_symbol}")
-            return k_symbol
+        # Step 2: Check if k-prefixed version exists (try both cases)
+        k_symbol_lower = f"k{symbol}"  # kPEPE
+        k_symbol_upper = f"K{symbol}"  # KPEPE
+        
+        if k_symbol_lower in available_symbols:
+            logger.info(f"🔄 Mapped symbol {symbol} → {k_symbol_lower}")
+            return k_symbol_lower
+        elif k_symbol_upper in available_symbols:
+            logger.info(f"🔄 Mapped symbol {symbol} → {k_symbol_upper}")
+            return k_symbol_upper
         
         # Step 3: Symbol not found - log available symbols for debugging
-        logger.warning(f"❌ Symbol not found: {symbol} (checked {symbol} and {k_symbol})")
+        logger.warning(f"❌ Symbol not found: {symbol} (checked {symbol}, {k_symbol_lower}, and {k_symbol_upper})")
         logger.debug(f"🔍 Available symbols: {sorted(list(available_symbols))[:20]}...")  # Show first 20
         return None
     

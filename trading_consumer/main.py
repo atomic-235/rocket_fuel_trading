@@ -261,9 +261,9 @@ class TradingConsumer:
                     
                     # Check if we mapped from non-k token to k-token (price scaling needed)
                     original_symbol = signal.symbol
-                    if (not original_symbol.startswith('k') and 
-                        resolved_symbol.startswith('k') and 
-                        resolved_symbol[1:] == original_symbol):
+                    if (not original_symbol.upper().startswith('K') and 
+                        resolved_symbol.upper().startswith('K') and 
+                        resolved_symbol[1:].upper() == original_symbol.upper()):
                         
                         logger.info(f"💰 Scaling prices for k-token: {original_symbol} → {resolved_symbol}")
                         
