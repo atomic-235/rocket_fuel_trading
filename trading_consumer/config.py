@@ -1,5 +1,5 @@
 """
-Configuration management for trading consumer.
+Configuration management for trading consumer with encrypted secrets support.
 """
 
 import os
@@ -15,10 +15,49 @@ from .models.config import (
     TradingConfig,
     LoggingConfig,
 )
+from .utils.crypto import get_secret_manager
+
+
+# Define which environment variables contain sensitive data that should be encrypted
+SENSITIVE_ENV_VARS = [
+    "TELEGRAM_BOT_TOKEN",
+    "HYPERLIQUID_API_KEY",
+    "HYPERLIQUID_API_ADDRESS", 
+    "HYPERLIQUID_VAULT_ADDRESS",
+]
+
+
+def _get_env_value(key: str, default: str = "") -> str:
+    """
+    Get environment variable value and decrypt if encrypted.
+    
+    Args:
+        key: Environment variable name
+        default: Default value if not found
+    """
+    value = os.getenv(key, default)
+    
+    if not value:
+        return value
+    
+    # Check if this is a sensitive variable and if it's encrypted
+    if key in SENSITIVE_ENV_VARS:
+        secret_manager = get_secret_manager()
+        if secret_manager.is_encrypted(value):
+            logger.debug(f"🔓 Decrypting {key}")
+            try:
+                return secret_manager.decrypt_secret(value)
+            except Exception as e:
+                logger.error(f"❌ Failed to decrypt {key}: {e}")
+                raise ValueError(f"Failed to decrypt {key} - check master password")
+        else:
+            logger.warning(f"⚠️ {key} is not encrypted but should be for security")
+    
+    return value
 
 
 def load_config(env_file: Optional[str] = None) -> AppConfig:
-    """Load configuration from environment variables."""
+    """Load configuration from environment variables with encrypted secrets support."""
     
     # Load environment variables
     if env_file:
@@ -29,44 +68,44 @@ def load_config(env_file: Optional[str] = None) -> AppConfig:
     try:
         # Telegram configuration
         telegram_config = TelegramConfig(
-            bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
-            chat_ids=_parse_int_list(os.getenv("TELEGRAM_CHAT_IDS", "")),
-            owner_telegram_id=int(os.getenv("OWNER_TELEGRAM_ID")) if os.getenv("OWNER_TELEGRAM_ID") else None,
-            allowed_users=_parse_list(os.getenv("TELEGRAM_ALLOWED_USERS")),
-            allowed_user_ids=_parse_int_list(os.getenv("TELEGRAM_ALLOWED_USER_IDS")),
-            message_processing_delay=float(os.getenv("MESSAGE_PROCESSING_DELAY", "1.0")),
-            max_retries=int(os.getenv("MAX_RETRIES", "3")),
-            retry_delay=float(os.getenv("RETRY_DELAY", "5.0")),
+            bot_token=_get_env_value("TELEGRAM_BOT_TOKEN"),
+            chat_ids=_parse_int_list(_get_env_value("TELEGRAM_CHAT_IDS")),
+            owner_telegram_id=int(_get_env_value("OWNER_TELEGRAM_ID")) if _get_env_value("OWNER_TELEGRAM_ID") else None,
+            allowed_users=_parse_list(_get_env_value("TELEGRAM_ALLOWED_USERS")),
+            allowed_user_ids=_parse_int_list(_get_env_value("TELEGRAM_ALLOWED_USER_IDS")),
+            message_processing_delay=float(_get_env_value("MESSAGE_PROCESSING_DELAY", "1.0")),
+            max_retries=int(_get_env_value("MAX_RETRIES", "3")),
+            retry_delay=float(_get_env_value("RETRY_DELAY", "5.0")),
         )
         
         # Hyperliquid configuration
         hyperliquid_config = HyperliquidConfig(
-            wallet_address=os.getenv("HYPERLIQUID_API_ADDRESS", ""),
-            private_key=os.getenv("HYPERLIQUID_API_KEY", ""),
-            vault_address=os.getenv("HYPERLIQUID_VAULT_ADDRESS"),  # Optional vault address
-            testnet=_parse_bool(os.getenv("HYPERLIQUID_TESTNET", "true")),
-            sandbox=_parse_bool(os.getenv("HYPERLIQUID_SANDBOX", "false")),
-            timeout=int(os.getenv("HYPERLIQUID_TIMEOUT", "30")),
-            rate_limit=int(os.getenv("HYPERLIQUID_RATE_LIMIT", "10")),
+            wallet_address=_get_env_value("HYPERLIQUID_API_ADDRESS"),
+            private_key=_get_env_value("HYPERLIQUID_API_KEY"),
+            vault_address=_get_env_value("HYPERLIQUID_VAULT_ADDRESS") or None,  # Convert empty string to None
+            testnet=_parse_bool(_get_env_value("HYPERLIQUID_TESTNET", "true")),
+            sandbox=_parse_bool(_get_env_value("HYPERLIQUID_SANDBOX", "false")),
+            timeout=int(_get_env_value("HYPERLIQUID_TIMEOUT", "30")),
+            rate_limit=int(_get_env_value("HYPERLIQUID_RATE_LIMIT", "10")),
         )
         
         # Trading configuration
         trading_config = TradingConfig(
-            default_position_size_usd=float(os.getenv("DEFAULT_POSITION_SIZE_USD", "12")),
-            default_leverage=int(os.getenv("DEFAULT_LEVERAGE", "2")),
-            default_tp_percent=float(os.getenv("DEFAULT_TP_PERCENT", "0.05")),
-            default_sl_percent=float(os.getenv("DEFAULT_SL_PERCENT", "0.02")),
-            max_leverage=int(os.getenv("MAX_LEVERAGE", "10")),
-            min_confidence=float(os.getenv("MIN_CONFIDENCE", "0.7")),
+            default_position_size_usd=float(_get_env_value("DEFAULT_POSITION_SIZE_USD", "12")),
+            default_leverage=int(_get_env_value("DEFAULT_LEVERAGE", "2")),
+            default_tp_percent=float(_get_env_value("DEFAULT_TP_PERCENT", "0.05")),
+            default_sl_percent=float(_get_env_value("DEFAULT_SL_PERCENT", "0.02")),
+            max_leverage=int(_get_env_value("MAX_LEVERAGE", "10")),
+            min_confidence=float(_get_env_value("MIN_CONFIDENCE", "0.7")),
         )
         
         # Logging configuration
         logging_config = LoggingConfig(
-            level=os.getenv("LOG_LEVEL", "INFO"),
-            file=os.getenv("LOG_FILE", "trading_consumer.log"),
-            max_file_size=os.getenv("LOG_MAX_FILE_SIZE", "10 MB"),
-            backup_count=int(os.getenv("LOG_BACKUP_COUNT", "5")),
-            format=os.getenv(
+            level=_get_env_value("LOG_LEVEL", "INFO"),
+            file=_get_env_value("LOG_FILE", "trading_consumer.log"),
+            max_file_size=_get_env_value("LOG_MAX_FILE_SIZE", "10 MB"),
+            backup_count=int(_get_env_value("LOG_BACKUP_COUNT", "5")),
+            format=_get_env_value(
                 "LOG_FORMAT",
                 "{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} | {message}"
             ),

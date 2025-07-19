@@ -38,7 +38,7 @@ class SymbolResolver:
                     symbol = market_symbol.split('/')[0]
                     symbols.add(symbol)
             
-            logger.debug(f"✅ Extracted {len(symbols)} perpetual symbols")
+            logger.info(f"✅ Extracted {len(symbols)} perpetual symbols")
             
             self._available_symbols = symbols
             return symbols
@@ -66,10 +66,13 @@ class SymbolResolver:
         available_symbols = await self.get_available_symbols()
         
         if not available_symbols:
-            logger.warning(f"⚠️ Could not get symbols, returning original: {symbol}")
+            logger.warning(
+                f"⚠️ Could not get symbols (available_symbols count: {len(available_symbols)}), "
+                f"returning original: {symbol}"
+            )
             return symbol
         
-        logger.debug(f"📋 Checking against {len(available_symbols)} available symbols")
+        logger.info(f"📋 Checking against {len(available_symbols)} available symbols")
         
         # Step 1: Check if original symbol exists
         if symbol in available_symbols:

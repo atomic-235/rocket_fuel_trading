@@ -258,6 +258,30 @@ class TradingConsumer:
                 
                 if resolved_symbol != signal.symbol:
                     logger.info(f"🔄 Symbol resolved: {signal.symbol} → {resolved_symbol}")
+                    
+                    # Check if we mapped from non-k token to k-token (price scaling needed)
+                    original_symbol = signal.symbol
+                    if (not original_symbol.startswith('k') and 
+                        resolved_symbol.startswith('k') and 
+                        resolved_symbol[1:] == original_symbol):
+                        
+                        logger.info(f"💰 Scaling prices for k-token: {original_symbol} → {resolved_symbol}")
+                        
+                        # Multiply prices by 1000 for k-tokens
+                        if signal.price is not None:
+                            old_price = signal.price
+                            signal.price = signal.price * 1000
+                            logger.info(f"📈 Entry price: ${old_price} → ${signal.price}")
+                        
+                        if signal.stop_loss is not None:
+                            old_sl = signal.stop_loss
+                            signal.stop_loss = signal.stop_loss * 1000
+                            logger.info(f"🛡️ Stop loss: ${old_sl} → ${signal.stop_loss}")
+                        
+                        if signal.take_profit is not None:
+                            old_tp = signal.take_profit
+                            signal.take_profit = signal.take_profit * 1000
+                            logger.info(f"🎯 Take profit: ${old_tp} → ${signal.take_profit}")
                 
                 # Update signal with resolved symbol
                 signal.symbol = resolved_symbol
