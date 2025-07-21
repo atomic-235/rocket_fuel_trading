@@ -67,6 +67,9 @@ class TradingConfig(BaseModel):
     """Trading configuration."""
     
     default_position_size_usd: float = Field(default=12.0, gt=0)  # Default USD amount for orders
+    position_low: float = Field(default=6.0, gt=0)  # USD amount for low conviction
+    position_mid: float = Field(default=12.0, gt=0)  # USD amount for medium conviction  
+    position_high: float = Field(default=24.0, gt=0)  # USD amount for high conviction
     default_leverage: int = Field(default=2, ge=1, le=100)  # Default leverage
     default_tp_percent: float = Field(default=0.05, gt=0, le=1)  # Default take profit %
     default_sl_percent: float = Field(default=0.02, gt=0, le=1)  # Default stop loss %
@@ -80,6 +83,24 @@ class TradingConfig(BaseModel):
         if not 0 < v <= 1:
             raise ValueError("Percentages must be between 0 and 1")
         return v
+    
+    def get_position_size_for_conviction(self, trader_conviction: str) -> float:
+        """Get position size based on trader conviction level."""
+        if not trader_conviction:
+            return self.default_position_size_usd
+            
+        conviction_lower = trader_conviction.lower().strip()
+        
+        # Map conviction levels to position sizes
+        if conviction_lower in ['low', 'weak', 'small', 'light']:
+            return self.position_low
+        elif conviction_lower in ['medium', 'med', 'moderate', 'normal']:
+            return self.position_mid
+        elif conviction_lower in ['high', 'strong', 'large', 'heavy', 'confident']:
+            return self.position_high
+        else:
+            # Unknown conviction level, use default
+            return self.default_position_size_usd
 
 
 class LoggingConfig(BaseModel):

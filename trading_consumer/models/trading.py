@@ -47,6 +47,7 @@ class TradingSignal(BaseModel):
     take_profit: Optional[Decimal] = None
     leverage: Optional[int] = Field(None, ge=1, le=100)
     confidence: float = Field(0.0, ge=0.0, le=1.0)
+    trader_conviction: Optional[str] = Field(None, description="Trader conviction level: low, medium, high, etc.")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     source_message: str
     metadata: Dict[str, Any] = Field(default_factory=dict)

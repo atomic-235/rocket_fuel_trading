@@ -80,26 +80,21 @@ class HyperliquidExchange:
             raise
     
     async def set_leverage(self, symbol: str, leverage: int, margin_mode: str = "cross") -> bool:
-        """Set leverage for a symbol."""
+        """Set leverage for a symbol using correct Hyperliquid API."""
         if not self._connected:
             await self.initialize()
         
         try:
             symbol_formatted = f"{symbol}/USDC:USDC"
             
-            logger.info(f"⚡ Setting {leverage}x leverage for {symbol}...")
+            logger.info(f"⚡ Setting {leverage}x leverage for {symbol} with {margin_mode} margin...")
             
-            # Set leverage (following user's example)
-            self.exchange.set_leverage(leverage, symbol_formatted)
-            
-            # Optionally set margin mode
-            if margin_mode == "isolated":
-                logger.info(f"🔒 Setting isolated margin mode for {symbol}")
-                self.exchange.set_leverage(
-                    leverage, 
-                    symbol_formatted, 
-                    params={"marginMode": "isolated"}
-                )
+            # Use correct Hyperliquid API - set_margin_mode with leverage parameter
+            self.exchange.set_margin_mode(
+                margin_mode, 
+                symbol_formatted, 
+                params={"leverage": leverage}
+            )
             
             logger.info(
                 f"✅ Leverage set to {leverage}x for {symbol} with {margin_mode} margin"

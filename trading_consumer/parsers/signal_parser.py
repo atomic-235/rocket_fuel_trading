@@ -30,8 +30,10 @@ class SignalParser:
             # Check if this looks like an error message (for informational logging only)
             if "Pipeline Error" in content or "TLObject" in content:
                 logger.warning("🚨 Upstream service error detected in message")
+                return None
             elif content.startswith("❌") and ("Error:" in content or "Exception:" in content):
                 logger.warning("🚨 Error message format detected")
+                return None
             
             # Always try to parse - don't filter anything out
             logger.debug("📥 Attempting to parse as JSON...")
@@ -130,6 +132,9 @@ class SignalParser:
             # Use confidence from JSON (much higher than text parsing)
             confidence = trade.get('confidence', 0.9)
             
+            # Extract trader conviction level (low, medium, high, etc.)
+            trader_conviction = trade.get('trader_conviction')
+            
             # Create trading signal
             signal = TradingSignal(
                 signal_type=signal_type,
@@ -140,6 +145,7 @@ class SignalParser:
                 take_profit=take_profit,
                 leverage=leverage,
                 confidence=confidence,
+                trader_conviction=trader_conviction,
                 source_message=content,
                 metadata={
                     "sender": message.sender_name,
@@ -158,21 +164,27 @@ class SignalParser:
             # Enhanced logging based on signal type
             if signal_type == SignalType.CLOSE:
                 price_info = f"@ ${price}" if price else "market price"
+                conviction_info = f", conviction: {trader_conviction}" if trader_conviction else ""
                 logger.info(
                     f"✅ Extracted CLOSE signal: {signal.symbol} {price_info} "
-                    f"(confidence: {signal.confidence:.2f})"
+                    f"(confidence: {signal.confidence:.2f}{conviction_info})"
                 )
             else:
                 price_info = f"@ ${price}" if price else "market price"
+                conviction_info = f", conviction: {trader_conviction}" if trader_conviction else ""
                 logger.info(
                     f"✅ Extracted {signal.signal_type.value.upper()} signal: {signal.symbol} "
-                    f"{price_info} (confidence: {signal.confidence:.2f})"
+                    f"{price_info} (confidence: {signal.confidence:.2f}{conviction_info})"
                 )
             
             return signal
             
-        except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
-            logger.debug(f"📄 Not valid JSON trade data (normal for text messages): {str(e)[:100]}")
+        except json.JSONDecodeError as e:
+            logger.debug(f"📄 Not valid JSON (normal for text messages): {str(e)[:100]}")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error parsing signal: {e}")
+            logger.error(f"🔍 Content: {content[:200]}...")
             return None
 
 # All text parsing methods removed - only JSON parsing is used 

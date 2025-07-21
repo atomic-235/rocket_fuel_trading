@@ -92,6 +92,9 @@ def load_config(env_file: Optional[str] = None) -> AppConfig:
         # Trading configuration
         trading_config = TradingConfig(
             default_position_size_usd=float(_get_env_value("DEFAULT_POSITION_SIZE_USD", "12")),
+            position_low=float(_get_env_value("POSITION_LOW", "12")),
+            position_mid=float(_get_env_value("POSITION_MID", "24")),
+            position_high=float(_get_env_value("POSITION_HIGH", "56")),
             default_leverage=int(_get_env_value("DEFAULT_LEVERAGE", "2")),
             default_tp_percent=float(_get_env_value("DEFAULT_TP_PERCENT", "0.05")),
             default_sl_percent=float(_get_env_value("DEFAULT_SL_PERCENT", "0.02")),

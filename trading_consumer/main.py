@@ -228,9 +228,10 @@ class TradingConsumer:
     async def _execute_signal(self, signal: TradingSignal) -> None:
         """Execute trading signal - Full Production Implementation."""
         try:
+            conviction_info = f", conviction: {signal.trader_conviction}" if signal.trader_conviction else ""
             logger.info(
                 f"🎯 Executing Signal: {signal.signal_type.value} {signal.symbol} "
-                f"(confidence: {signal.confidence:.2f})"
+                f"(confidence: {signal.confidence:.2f}{conviction_info})"
             )
             
             # Send notification to owner about valid signal
@@ -318,14 +319,18 @@ class TradingConsumer:
             current_price = float(ticker['mid_price'])
             logger.info(f"📊 Current {symbol} price: ${current_price:,.2f}")
             
-            # Calculate position size
+            # Calculate position size based on trader conviction
             if signal.quantity:
                 quantity = float(signal.quantity)
+                usd_amount = quantity * current_price
             else:
-                # Use default USD amount
-                quantity = round(self.config.trading.default_position_size_usd / current_price, 6)
+                # Use conviction-based position sizing
+                usd_amount = self.config.trading.get_position_size_for_conviction(signal.trader_conviction)
+                quantity = round(usd_amount / current_price, 6)
             
-            logger.info(f"💰 Position size: {quantity} {symbol} (~${quantity * current_price:.2f} USD)")
+            # Log position sizing with conviction info
+            conviction_info = f" (conviction: {signal.trader_conviction})" if signal.trader_conviction else ""
+            logger.info(f"💰 Position size: {quantity} {symbol} (~${usd_amount:.2f} USD{conviction_info})")
             
             # Set leverage (use signal leverage or default)
             leverage = signal.leverage if signal.leverage else self.config.trading.default_leverage
@@ -471,14 +476,18 @@ class TradingConsumer:
             current_price = float(ticker['mid_price'])
             logger.info(f"📊 Current {symbol} price: ${current_price:,.2f}")
             
-            # Calculate position size
+            # Calculate position size based on trader conviction
             if signal.quantity:
                 quantity = float(signal.quantity)
+                usd_amount = quantity * current_price
             else:
-                # Use default USD amount
-                quantity = round(self.config.trading.default_position_size_usd / current_price, 6)
+                # Use conviction-based position sizing
+                usd_amount = self.config.trading.get_position_size_for_conviction(signal.trader_conviction)
+                quantity = round(usd_amount / current_price, 6)
             
-            logger.info(f"💰 Position size: {quantity} {symbol} (~${quantity * current_price:.2f} USD)")
+            # Log position sizing with conviction info
+            conviction_info = f" (conviction: {signal.trader_conviction})" if signal.trader_conviction else ""
+            logger.info(f"💰 Position size: {quantity} {symbol} (~${usd_amount:.2f} USD{conviction_info})")
             
             # Set leverage (use signal leverage or default)
             leverage = signal.leverage if signal.leverage else self.config.trading.default_leverage
@@ -610,6 +619,10 @@ class TradingConsumer:
                 f"💰 <b>Symbol:</b> {signal.symbol}",
                 f"📈 <b>Confidence:</b> {signal.confidence:.2f}",
             ]
+            
+            # Add trader conviction if available
+            if signal.trader_conviction:
+                signal_details.append(f"🎲 <b>Conviction:</b> {signal.trader_conviction}")
             
             # Add price details if available
             if signal.price:
