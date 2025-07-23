@@ -192,7 +192,7 @@ class TradingConsumer:
         # Check against recent trades
         for recent_trade in self._recent_trades:
             if (recent_trade.symbol == signal.symbol and 
-                recent_trade.signal_type == signal.signal_type):
+                    recent_trade.signal_type == signal.signal_type):
                 
                 # Check if key parameters match
                 price_match = (
@@ -263,8 +263,8 @@ class TradingConsumer:
                     # Check if we mapped from non-k token to k-token (price scaling needed)
                     original_symbol = signal.symbol
                     if (not original_symbol.upper().startswith('K') and 
-                        resolved_symbol.upper().startswith('K') and 
-                        resolved_symbol[1:].upper() == original_symbol.upper()):
+                            resolved_symbol.upper().startswith('K') and 
+                            resolved_symbol[1:].upper() == original_symbol.upper()):
                         
                         logger.info(f"💰 Scaling prices for k-token: {original_symbol} → {resolved_symbol}")
                         
@@ -341,25 +341,21 @@ class TradingConsumer:
                 logger.error(f"❌ Failed to set leverage for {symbol}")
                 return
             
-            # Calculate TP/SL prices
+            # Calculate TP/SL prices using DEFAULTS ONLY (ignore message values)
             entry_price = float(signal.price) if signal.price else current_price
             
-            if signal.take_profit:
-                tp_price = float(signal.take_profit)
-            else:
-                tp_price = entry_price * (1 + self.config.trading.default_tp_percent)  # 5% profit
+            # Always use default TP/SL percentages
+            tp_price = entry_price * (1 + self.config.trading.default_tp_percent)  # 5% profit
+            sl_price = entry_price * (1 - self.config.trading.default_sl_percent)  # 2% loss
             
-            if signal.stop_loss:
-                sl_price = float(signal.stop_loss)
-            else:
-                sl_price = entry_price * (1 - self.config.trading.default_sl_percent)  # 2% loss
-            
-            logger.info(f"🎯 TP/SL Prices:")
+            logger.info("🎯 TP/SL Prices:")
             logger.info(f"   📈 Take Profit: ${tp_price:,.2f} (+{((tp_price/entry_price)-1)*100:.1f}%)")
             logger.info(f"   📉 Stop Loss: ${sl_price:,.2f} ({((sl_price/entry_price)-1)*100:.1f}%)")
             
-            # If signal has a specific price, check if it's close to market price
-            limit_order_price = None
+            # Determine order type based on price difference
+            use_limit_order = False
+            order_price = None
+            
             if signal.price:
                 signal_price = float(signal.price)
                 price_diff_pct = abs(current_price - signal_price) / signal_price
@@ -367,58 +363,49 @@ class TradingConsumer:
                 if price_diff_pct <= 0.05:  # Within 5%
                     logger.info(
                         f"📊 Signal price ${signal_price:.3f} within 5% of market ${current_price:.3f} "
-                        f"({price_diff_pct*100:.1f}% diff) - will use market price for orders"
+                        f"({price_diff_pct*100:.1f}% diff) - using MARKET order"
                     )
-                    limit_order_price = current_price  # Use market price for limit order too
+                    use_limit_order = False
                 else:
                     logger.info(
                         f"📊 Signal price ${signal_price:.3f} differs {price_diff_pct*100:.1f}% from market "
-                        f"${current_price:.3f} - will use signal price for limit fallback"
+                        f"${current_price:.3f} - using LIMIT order at signal price"
                     )
-                    limit_order_price = signal_price  # Use signal price for limit order
+                    use_limit_order = True
+                    order_price = signal_price
+            else:
+                logger.info("📊 No signal price provided - using MARKET order")
+                use_limit_order = False
             
-            # Create market buy order
-            logger.info("🚀 Creating market BUY order...")
-            
-            market_order = TradeOrder(
-                symbol=symbol,
-                side=SignalType.BUY,
-                order_type=OrderType.MARKET,
-                quantity=quantity,
-                leverage=leverage
-            )
-            
-            # Try market order first
-            try:
-                result = await self.exchange.create_order(market_order)
+            # Create order based on price difference
+            if use_limit_order:
+                logger.info(f"🎯 Creating LIMIT BUY order @ ${order_price:.3f}...")
+                
+                order = TradeOrder(
+                    symbol=symbol,
+                    side=SignalType.BUY,
+                    order_type=OrderType.LIMIT,
+                    quantity=quantity,
+                    price=Decimal(str(order_price)),
+                    leverage=leverage
+                )
+                
+                result = await self.exchange.create_order(order)
+                logger.info(f"✅ Limit order created: {result.id} @ ${order_price:.3f}")
+                
+            else:
+                logger.info("🚀 Creating MARKET BUY order...")
+                
+                order = TradeOrder(
+                    symbol=symbol,
+                    side=SignalType.BUY,
+                    order_type=OrderType.MARKET,
+                    quantity=quantity,
+                    leverage=leverage
+                )
+                
+                result = await self.exchange.create_order(order)
                 logger.info(f"✅ Market order created: {result.id}")
-                
-            except Exception as market_error:
-                logger.warning(f"⚠️ Market order failed: {market_error}")
-                
-                # Try limit order fallback if we have a price
-                if limit_order_price is not None:
-                    logger.info(f"🔄 Trying limit order at ${limit_order_price:.3f}")
-                    
-                    limit_order = TradeOrder(
-                        symbol=symbol,
-                        side=SignalType.BUY,
-                        order_type=OrderType.LIMIT,
-                        quantity=quantity,
-                        price=Decimal(str(limit_order_price)),
-                        leverage=leverage
-                    )
-                    
-                    try:
-                        result = await self.exchange.create_order(limit_order)
-                        logger.info(f"✅ Limit order created: {result.id} @ ${limit_order_price:.3f}")
-                    except Exception as limit_error:
-                        logger.error(f"❌ Both market and limit orders failed: {limit_error}")
-                        raise limit_error
-                else:
-                    # No signal price to fall back to, re-raise market order error
-                    logger.error("❌ No limit order fallback available (no signal price)")
-                    raise market_error
             
             # Order execution successful - continue with TP/SL and notifications
             if result and result.id:
@@ -442,9 +429,9 @@ class TradingConsumer:
                     logger.warning("⚠️ No TP/SL orders created")
                 
                 # Log trade summary
-                logger.info(f"📋 Trade Summary:")
+                logger.info("📋 Trade Summary:")
                 logger.info(f"   Symbol: {symbol}")
-                logger.info(f"   Side: BUY/LONG")
+                logger.info("   Side: BUY/LONG")
                 logger.info(f"   Size: {quantity} {symbol}")
                 logger.info(f"   Entry: ${entry_price:,.2f}")
                 logger.info(f"   Leverage: {leverage}x")
@@ -498,35 +485,71 @@ class TradingConsumer:
                 logger.error(f"❌ Failed to set leverage for {symbol}")
                 return
             
-            # Calculate TP/SL prices for SHORT
+            # Calculate TP/SL prices for SHORT using DEFAULTS ONLY (ignore message values)
             entry_price = float(signal.price) if signal.price else current_price
             
-            if signal.take_profit:
-                tp_price = float(signal.take_profit)
-            else:
-                tp_price = entry_price * (1 - self.config.trading.default_tp_percent)  # 5% profit (price goes down)
+            # Always use default TP/SL percentages for SHORT positions
+            tp_price = entry_price * (1 - self.config.trading.default_tp_percent)  # 5% profit (price goes down)
+            sl_price = entry_price * (1 + self.config.trading.default_sl_percent)  # 2% loss (price goes up)
             
-            if signal.stop_loss:
-                sl_price = float(signal.stop_loss)
-            else:
-                sl_price = entry_price * (1 + self.config.trading.default_sl_percent)  # 2% loss (price goes up)
-            
-            logger.info(f"🎯 TP/SL Prices (SHORT):")
+            logger.info("🎯 TP/SL Prices (SHORT):")
             logger.info(f"   📈 Take Profit: ${tp_price:,.2f} ({((tp_price/entry_price)-1)*100:.1f}%)")
             logger.info(f"   📉 Stop Loss: ${sl_price:,.2f} (+{((sl_price/entry_price)-1)*100:.1f}%)")
             
-            # Create market sell order (short)
-            logger.info(f"🚀 Creating market SELL order (SHORT)...")
+            # Determine order type based on price difference
+            use_limit_order = False
+            order_price = None
             
-            market_order = TradeOrder(
-                symbol=symbol,
-                side=SignalType.SELL,
-                order_type=OrderType.MARKET,
-                quantity=quantity,
-                leverage=leverage
-            )
+            if signal.price:
+                signal_price = float(signal.price)
+                price_diff_pct = abs(current_price - signal_price) / signal_price
+                
+                if price_diff_pct <= 0.05:  # Within 5%
+                    logger.info(
+                        f"📊 Signal price ${signal_price:.3f} within 5% of market ${current_price:.3f} "
+                        f"({price_diff_pct*100:.1f}% diff) - using MARKET order"
+                    )
+                    use_limit_order = False
+                else:
+                    logger.info(
+                        f"📊 Signal price ${signal_price:.3f} differs {price_diff_pct*100:.1f}% from market "
+                        f"${current_price:.3f} - using LIMIT order at signal price"
+                    )
+                    use_limit_order = True
+                    order_price = signal_price
+            else:
+                logger.info("📊 No signal price provided - using MARKET order")
+                use_limit_order = False
             
-            result = await self.exchange.create_order(market_order)
+            # Create order based on price difference
+            if use_limit_order:
+                logger.info(f"🎯 Creating LIMIT SELL order (SHORT) @ ${order_price:.3f}...")
+                
+                order = TradeOrder(
+                    symbol=symbol,
+                    side=SignalType.SELL,
+                    order_type=OrderType.LIMIT,
+                    quantity=quantity,
+                    price=Decimal(str(order_price)),
+                    leverage=leverage
+                )
+                
+                result = await self.exchange.create_order(order)
+                logger.info(f"✅ Limit order created: {result.id} @ ${order_price:.3f}")
+                
+            else:
+                logger.info("🚀 Creating MARKET SELL order (SHORT)...")
+                
+                order = TradeOrder(
+                    symbol=symbol,
+                    side=SignalType.SELL,
+                    order_type=OrderType.MARKET,
+                    quantity=quantity,
+                    leverage=leverage
+                )
+                
+                result = await self.exchange.create_order(order)
+                logger.info(f"✅ Market order created: {result.id}")
             
             if result and result.id:
                 logger.info(f"✅ Market order created: {result.id}")
@@ -534,7 +557,7 @@ class TradingConsumer:
                 logger.info(f"   Filled: {result.filled_quantity}")
                 
                 # Create TP/SL orders for SHORT position
-                logger.info(f"🎯 Creating TP/SL orders for SHORT...")
+                logger.info("🎯 Creating TP/SL orders for SHORT...")
                 
                 tp_sl_orders = await self.exchange.create_tp_sl_orders(
                     symbol=symbol,
@@ -550,9 +573,9 @@ class TradingConsumer:
                     logger.warning("⚠️ No TP/SL orders created")
                 
                 # Log trade summary
-                logger.info(f"📋 Trade Summary:")
+                logger.info("📋 Trade Summary:")
                 logger.info(f"   Symbol: {symbol}")
-                logger.info(f"   Side: SELL/SHORT")
+                logger.info("   Side: SELL/SHORT")
                 logger.info(f"   Size: {quantity} {symbol}")
                 logger.info(f"   Entry: ${entry_price:,.2f}")
                 logger.info(f"   Leverage: {leverage}x")
@@ -614,7 +637,7 @@ class TradingConsumer:
             
             # Format signal details
             signal_details = [
-                f"📊 <b>Signal Received</b>",
+                "📊 <b>Signal Received</b>",
                 f"🎯 <b>Type:</b> {signal.signal_type.value}",
                 f"💰 <b>Symbol:</b> {signal.symbol}",
                 f"📈 <b>Confidence:</b> {signal.confidence:.2f}",

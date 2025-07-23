@@ -92,9 +92,9 @@ class HyperliquidExchange:
             # Use correct Hyperliquid API - set_margin_mode with leverage parameter
             self.exchange.set_margin_mode(
                 margin_mode, 
-                symbol_formatted, 
+                    symbol_formatted, 
                 params={"leverage": leverage}
-            )
+                )
             
             logger.info(
                 f"✅ Leverage set to {leverage}x for {symbol} with {margin_mode} margin"
