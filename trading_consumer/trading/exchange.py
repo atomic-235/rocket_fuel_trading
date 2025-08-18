@@ -202,6 +202,28 @@ class HyperliquidExchange:
             order.metadata['error'] = str(e)
             raise
     
+    async def wait_for_order_fill(self, order_id: str, symbol: str, timeout_seconds: int = 30) -> bool:
+        """Wait for an order to be filled with timeout."""
+        for attempt in range(timeout_seconds):
+            try:
+                order_status = await self.get_order_status(order_id, symbol)
+                logger.debug(f"Order {order_id} status: {order_status.value} (attempt {attempt + 1}/{timeout_seconds})")
+                
+                if order_status == OrderStatus.FILLED:
+                    logger.info(f"✅ Order {order_id} filled successfully")
+                    return True
+                elif order_status in [OrderStatus.CANCELLED, OrderStatus.REJECTED]:
+                    logger.error(f"❌ Order {order_id} failed with status: {order_status.value}")
+                    return False
+                
+                await asyncio.sleep(1)
+            except Exception as e:
+                logger.warning(f"Error checking order status (attempt {attempt + 1}): {e}")
+                await asyncio.sleep(1)
+        
+        logger.warning(f"⏰ Order {order_id} fill timeout after {timeout_seconds} seconds")
+        return False
+
     async def create_tp_sl_orders(self, symbol: str, tp_price: Optional[float] = None, sl_price: Optional[float] = None) -> List[Dict[str, Any]]:
         """Create TP/SL orders for existing position (following user's examples)."""
         if not self._connected:
@@ -216,31 +238,69 @@ class HyperliquidExchange:
             params['vaultAddress'] = self.config.vault_address
         
         try:
-            # Wait for position to be established (retry up to 10 times)
+            # Wait for position to be established (retry up to 15 times with better logic)
             position_found = False
             position_size = 0
             
-            for attempt in range(10):
+            for attempt in range(15):
                 try:
-                    position_params = {"user": self.config.wallet_address}
+                    # Use consistent user parameter logic
+                    position_params = {}
                     if self.config.vault_address:
                         position_params["user"] = self.config.vault_address  # Check vault positions
+                        logger.debug(f"Checking positions for vault: {self.config.vault_address}")
+                    else:
+                        position_params["user"] = self.config.wallet_address  # Check main wallet positions
+                        logger.debug(f"Checking positions for wallet: {self.config.wallet_address}")
                     
                     positions = self.exchange.fetch_positions([symbol_formatted], params=position_params)
-                    if positions and positions[0].get('contracts', 0) != 0:
-                        position_size = abs(positions[0]['contracts'])
-                        position_found = True
-                        logger.info(f"Position found: {position_size} contracts for {symbol}")
-                        break
-                    else:
-                        logger.info(f"Waiting for position... attempt {attempt + 1}/10")
-                        await asyncio.sleep(1)
+                    logger.debug(f"Fetch positions response: {positions}")
+                    
+                    if positions and len(positions) > 0:
+                        position = positions[0]
+                        contracts = position.get('contracts', 0)
+                        logger.debug(f"Position contracts: {contracts}")
+                        
+                        if contracts != 0:
+                            position_size = abs(contracts)
+                            position_found = True
+                            logger.info(f"✅ Position found: {position_size} contracts for {symbol}")
+                            break
+                    
+                    logger.info(f"⏳ Waiting for position... attempt {attempt + 1}/15")
+                    await asyncio.sleep(1)
+                    
                 except Exception as e:
                     logger.warning(f"Error checking position (attempt {attempt + 1}): {e}")
                     await asyncio.sleep(1)
             
             if not position_found:
-                raise ValueError(f"No position found for {symbol} after waiting 10 seconds")
+                # Try one more time with all positions to debug
+                try:
+                    all_positions = await self.get_positions()
+                    logger.error(f"All current positions: {[f'{p.symbol}: {p.size}' for p in all_positions]}")
+                    
+                    # Check if position exists with different symbol format
+                    for pos in all_positions:
+                        if pos.symbol.upper() == symbol.upper():
+                            position_size = float(pos.size)
+                            position_found = True
+                            logger.info(f"✅ Found position with alternative lookup: {position_size} {pos.symbol}")
+                            break
+                            
+                except Exception as e:
+                    logger.error(f"Failed to get all positions for debugging: {e}")
+                    
+                if not position_found:
+                    error_msg = (
+                        f"No position found for {symbol} after waiting 15 seconds. "
+                        f"This usually means:\n"
+                        f"1. Order was not filled due to insufficient liquidity or price movement\n"
+                        f"2. There's a configuration issue with vault/wallet addresses\n"
+                        f"3. Position was immediately closed by another process\n"
+                        f"Check order status and exchange logs for more details."
+                    )
+                    raise ValueError(error_msg)
         
             # Load markets to get current price
             markets = self.exchange.load_markets()

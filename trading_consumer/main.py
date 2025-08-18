@@ -407,12 +407,26 @@ class TradingConsumer:
                 result = await self.exchange.create_order(order)
                 logger.info(f"✅ Market order created: {result.id}")
             
-            # Order execution successful - continue with TP/SL and notifications
+            # Order execution successful - wait for fill and continue with TP/SL and notifications
             if result and result.id:
                 logger.info(f"📋 Order Status: {result.status.value}")
                 logger.info(f"📊 Filled: {result.filled_quantity}")
                 
-                # Create TP/SL orders
+                # Wait for order to be filled before creating TP/SL orders
+                if result.status != OrderStatus.FILLED:
+                    logger.info("⏳ Waiting for order to be filled...")
+                    order_filled = await self.exchange.wait_for_order_fill(result.id, symbol, timeout_seconds=30)
+                    
+                    if not order_filled:
+                        logger.error(f"❌ Order {result.id} was not filled within timeout")
+                        await self._notify_owner_trade_failed(signal, "Order was not filled within timeout")
+                        return
+                    else:
+                        logger.info(f"✅ Order {result.id} filled successfully")
+                else:
+                    logger.info("✅ Order already filled")
+                
+                # Create TP/SL orders after confirming order is filled
                 logger.info("🎯 Creating TP/SL orders...")
                 
                 tp_sl_orders = await self.exchange.create_tp_sl_orders(
@@ -556,7 +570,21 @@ class TradingConsumer:
                 logger.info(f"   Status: {result.status.value}")
                 logger.info(f"   Filled: {result.filled_quantity}")
                 
-                # Create TP/SL orders for SHORT position
+                # Wait for order to be filled before creating TP/SL orders
+                if result.status != OrderStatus.FILLED:
+                    logger.info("⏳ Waiting for order to be filled...")
+                    order_filled = await self.exchange.wait_for_order_fill(result.id, symbol, timeout_seconds=30)
+                    
+                    if not order_filled:
+                        logger.error(f"❌ Order {result.id} was not filled within timeout")
+                        await self._notify_owner_trade_failed(signal, "Order was not filled within timeout")
+                        return
+                    else:
+                        logger.info(f"✅ Order {result.id} filled successfully")
+                else:
+                    logger.info("✅ Order already filled")
+                
+                # Create TP/SL orders for SHORT position after confirming order is filled
                 logger.info("🎯 Creating TP/SL orders for SHORT...")
                 
                 tp_sl_orders = await self.exchange.create_tp_sl_orders(
