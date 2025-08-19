@@ -50,6 +50,12 @@ class SignalParser:
         try:
             import json
             
+            # Strip markdown code block formatting if present
+            if content.strip().startswith('```json\n') and content.strip().endswith('\n```'):
+                content = content.strip()[8:-4].strip()  # Remove ```json\n and \n```
+            elif content.strip().startswith('```\n') and content.strip().endswith('\n```'):
+                content = content.strip()[4:-4].strip()  # Remove ```\n and \n```
+            
             # Try to parse as JSON
             data = json.loads(content)
             
