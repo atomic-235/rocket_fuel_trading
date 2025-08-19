@@ -341,12 +341,32 @@ class TradingConsumer:
                 logger.error(f"❌ Failed to set leverage for {symbol}")
                 return
             
-            # Calculate TP/SL prices using DEFAULTS ONLY (ignore message values)
+            # Calculate TP/SL prices using signal values if provided, otherwise defaults
             entry_price = float(signal.price) if signal.price else current_price
             
-            # Always use default TP/SL percentages
-            tp_price = entry_price * (1 + self.config.trading.default_tp_percent)  # 5% profit
-            sl_price = entry_price * (1 - self.config.trading.default_sl_percent)  # 2% loss
+            # Use signal TP/SL if provided
+            if signal.take_profit and signal.stop_loss:
+                # Both TP and SL provided in signal
+                tp_price = float(signal.take_profit)
+                sl_price = float(signal.stop_loss)
+                logger.info("🎯 Using TP/SL from signal")
+            elif signal.stop_loss and not signal.take_profit:
+                # Only SL provided - calculate TP as double the SL percentage
+                sl_price = float(signal.stop_loss)
+                sl_percent = abs(sl_price - entry_price) / entry_price  # Calculate SL percentage
+                tp_percent = sl_percent * 2  # Double the SL percentage for TP
+                tp_price = entry_price * (1 + tp_percent)  # TP above entry for LONG
+                logger.info(f"🎯 Using SL from signal, calculated TP as 2x SL percentage ({tp_percent*100:.1f}%)")
+            elif signal.take_profit and not signal.stop_loss:
+                # Only TP provided - use default SL
+                tp_price = float(signal.take_profit)
+                sl_price = entry_price * (1 - self.config.trading.default_sl_percent)
+                logger.info("🎯 Using TP from signal, default SL")
+            else:
+                # Use default TP/SL percentages
+                tp_price = entry_price * (1 + self.config.trading.default_tp_percent)  # 5% profit
+                sl_price = entry_price * (1 - self.config.trading.default_sl_percent)  # 2% loss
+                logger.info("🎯 Using default TP/SL percentages")
             
             logger.info("🎯 TP/SL Prices:")
             logger.info(f"   📈 Take Profit: ${tp_price:,.2f} (+{((tp_price/entry_price)-1)*100:.1f}%)")
@@ -499,12 +519,32 @@ class TradingConsumer:
                 logger.error(f"❌ Failed to set leverage for {symbol}")
                 return
             
-            # Calculate TP/SL prices for SHORT using DEFAULTS ONLY (ignore message values)
+            # Calculate TP/SL prices for SHORT using signal values if provided, otherwise defaults
             entry_price = float(signal.price) if signal.price else current_price
             
-            # Always use default TP/SL percentages for SHORT positions
-            tp_price = entry_price * (1 - self.config.trading.default_tp_percent)  # 5% profit (price goes down)
-            sl_price = entry_price * (1 + self.config.trading.default_sl_percent)  # 2% loss (price goes up)
+            # Use signal TP/SL if provided (for SHORT positions)
+            if signal.take_profit and signal.stop_loss:
+                # Both TP and SL provided in signal
+                tp_price = float(signal.take_profit)
+                sl_price = float(signal.stop_loss)
+                logger.info("🎯 Using TP/SL from signal (SHORT)")
+            elif signal.stop_loss and not signal.take_profit:
+                # Only SL provided - calculate TP as double the SL percentage (SHORT logic)
+                sl_price = float(signal.stop_loss)
+                sl_percent = abs(sl_price - entry_price) / entry_price  # Calculate SL percentage
+                tp_percent = sl_percent * 2  # Double the SL percentage for TP
+                tp_price = entry_price * (1 - tp_percent)  # TP below entry for SHORT
+                logger.info(f"🎯 Using SL from signal, calculated TP as 2x SL percentage ({tp_percent*100:.1f}%) (SHORT)")
+            elif signal.take_profit and not signal.stop_loss:
+                # Only TP provided - use default SL
+                tp_price = float(signal.take_profit)
+                sl_price = entry_price * (1 + self.config.trading.default_sl_percent)
+                logger.info("🎯 Using TP from signal, default SL (SHORT)")
+            else:
+                # Use default TP/SL percentages for SHORT positions
+                tp_price = entry_price * (1 - self.config.trading.default_tp_percent)  # 5% profit (price goes down)
+                sl_price = entry_price * (1 + self.config.trading.default_sl_percent)  # 2% loss (price goes up)
+                logger.info("🎯 Using default TP/SL percentages (SHORT)")
             
             logger.info("🎯 TP/SL Prices (SHORT):")
             logger.info(f"   📈 Take Profit: ${tp_price:,.2f} ({((tp_price/entry_price)-1)*100:.1f}%)")
