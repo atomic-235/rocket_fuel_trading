@@ -163,8 +163,13 @@ class TradingConsumer:
             
             logger.info("🎯 Valid trading signal found!")
             
-            # Check confidence threshold
-            if signal.confidence < self.config.trading.min_confidence:
+            # Check confidence threshold (skip for specific chat)
+            bypass_chat_id = -4928770997
+            current_chat_id = signal.metadata.get("chat_id")
+            
+            if current_chat_id == bypass_chat_id:
+                logger.info(f"🚀 Bypassing confidence filter for chat {bypass_chat_id}")
+            elif signal.confidence < self.config.trading.min_confidence:
                 logger.info(
                     f"⚠️ Signal confidence {signal.confidence:.2f} below threshold "
                     f"{self.config.trading.min_confidence:.2f}, skipping"
