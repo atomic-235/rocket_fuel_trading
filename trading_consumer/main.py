@@ -15,7 +15,7 @@ from .telegram import TelegramClient
 from .parsers import SignalParser
 from .trading import HyperliquidExchange
 from .models.telegram import TelegramMessage
-from .models.trading import TradingSignal, TradeOrder, OrderType, SignalType
+from .models.trading import TradingSignal, TradeOrder, OrderType, SignalType, OrderStatus
 from .utils.symbol_resolver import resolve_symbol_for_trading
 from decimal import Decimal
 
