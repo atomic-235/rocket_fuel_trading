@@ -165,7 +165,7 @@ class TradingConsumer:
             
             # Check confidence threshold (skip for specific chat)
             bypass_chat_id = -4928770997
-            current_chat_id = signal.metadata.get("chat_id")
+            current_chat_id = message.chat.id
             
             if current_chat_id == bypass_chat_id:
                 logger.info(f"🚀 Bypassing confidence filter for chat {bypass_chat_id}")
