@@ -204,6 +204,8 @@ class HyperliquidExchange:
     
     async def wait_for_order_fill(self, order_id: str, symbol: str, timeout_seconds: int = 30) -> bool:
         """Wait for an order to be filled with timeout."""
+        symbol_formatted = f"{symbol}/USDC:USDC"
+
         for attempt in range(timeout_seconds):
             try:
                 order_status = await self.get_order_status(order_id, symbol)
@@ -215,6 +217,21 @@ class HyperliquidExchange:
                 elif order_status in [OrderStatus.CANCELLED, OrderStatus.REJECTED]:
                     logger.error(f"❌ Order {order_id} failed with status: {order_status.value}")
                     return False
+
+                # Fallback: check positions to detect fill (market orders may not reflect immediately via fetch_order)
+                try:
+                    position_params = {}
+                    if self.config.vault_address:
+                        position_params["user"] = self.config.vault_address
+                    else:
+                        position_params["user"] = self.config.wallet_address
+
+                    positions = self.exchange.fetch_positions([symbol_formatted], params=position_params)
+                    if positions and positions[0].get('contracts', 0) != 0:
+                        logger.info(f"✅ Position detected while waiting: {abs(positions[0]['contracts'])} {symbol}")
+                        return True
+                except Exception as e_pos:
+                    logger.debug(f"Position check error while waiting for fill: {e_pos}")
                 
                 await asyncio.sleep(1)
             except Exception as e:
@@ -423,7 +440,9 @@ class HyperliquidExchange:
             await self.initialize()
         
         try:
-            result = self.exchange.fetch_order(order_id, f"{symbol}/USDC:USDC")
+            # Include user/vault in params to ensure correct account scope
+            params = {"user": self.config.vault_address or self.config.wallet_address}
+            result = self.exchange.fetch_order(order_id, f"{symbol}/USDC:USDC", params)
             return self._map_order_status(result['status'])
         except Exception as e:
             logger.error(f"Failed to get order status: {e}")
