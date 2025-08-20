@@ -120,6 +120,14 @@ class HyperliquidExchange:
             # Load markets to get current price (for logging/metadata only)
             markets = self.exchange.load_markets()
             current_price = float(markets[symbol]["info"]["midPx"])
+            # Fetch ticker for bid/ask to support fallbacks
+            try:
+                ticker = self.exchange.fetch_ticker(symbol)
+                best_bid = float(ticker.get('bid') or 0) or current_price
+                best_ask = float(ticker.get('ask') or 0) or current_price
+            except Exception:
+                best_bid = current_price
+                best_ask = current_price
             
             # Map side
             side_map = {
@@ -197,9 +205,70 @@ class HyperliquidExchange:
             return order
             
         except Exception as e:
-            logger.error(f"❌ Failed to create order: {e}")
+            # Fallback: if market order couldn't immediately match, try aggressive LIMIT IOC
+            error_str = str(e)
+            logger.error(f"❌ Failed to create order: {error_str}")
+            try:
+                if order.order_type.value == 'market' and (
+                    'could not immediately match' in error_str.lower() or 'invalidorder' in error_str.lower()
+                ):
+                    logger.info("🔁 Falling back to aggressive LIMIT IOC order")
+                    # Recompute side and params
+                    side_map = {
+                        SignalType.BUY: 'buy',
+                        SignalType.LONG: 'buy',
+                        SignalType.SELL: 'sell',
+                        SignalType.SHORT: 'sell',
+                    }
+                    side_fallback = side_map.get(order.side, 'buy')
+                    params_fb = {}
+                    if self.config.vault_address:
+                        params_fb['vaultAddress'] = self.config.vault_address
+                    if order.leverage:
+                        params_fb['leverage'] = order.leverage
+                    # Price slightly beyond best to ensure take
+                    slippage_buffer = 0.002  # 0.2%
+                    if side_fallback == 'buy':
+                        limit_price = best_ask * (1 + slippage_buffer)
+                    else:
+                        limit_price = best_bid * (1 - slippage_buffer)
+                    # IOC to attempt immediate execution
+                    params_fb['timeInForce'] = 'IOC'
+                    result = self.exchange.create_order(
+                        symbol=symbol,
+                        type='limit',
+                        side=side_fallback,
+                        amount=float(order.quantity),
+                        price=float(limit_price),
+                        params=params_fb
+                    )
+                    logger.info(f"✅ Fallback LIMIT IOC order created at ${limit_price:.4f}")
+                    # Update order from result
+                    order.id = result['id']
+                    order.status = self._map_order_status(result['status'])
+                    try:
+                        avg_price = result.get('average', 0)
+                        order.average_price = (
+                            Decimal(str(avg_price)) if avg_price is not None else None
+                        )
+                    except (ValueError, TypeError, decimal.InvalidOperation):
+                        order.average_price = None
+                    try:
+                        order.filled_quantity = Decimal(str(result.get('filled', 0)))
+                    except (ValueError, TypeError, decimal.InvalidOperation):
+                        order.filled_quantity = Decimal('0')
+                    try:
+                        fee_cost = result.get('fee', {}).get('cost', 0) if result.get('fee') else 0
+                        order.fees = Decimal(str(fee_cost)) if fee_cost is not None else None
+                    except (ValueError, TypeError, decimal.InvalidOperation):
+                        order.fees = None
+                    order.metadata['exchange_response'] = result
+                    return order
+            except Exception as fb_e:
+                logger.error(f"❌ Fallback LIMIT IOC also failed: {fb_e}")
+            # If fallback not applicable or failed, mark rejected and re-raise
             order.status = OrderStatus.REJECTED
-            order.metadata['error'] = str(e)
+            order.metadata['error'] = error_str
             raise
     
     async def wait_for_order_fill(self, order_id: str, symbol: str, timeout_seconds: int = 30) -> bool:

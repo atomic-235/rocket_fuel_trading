@@ -356,12 +356,12 @@ class TradingConsumer:
                 sl_price = float(signal.stop_loss)
                 logger.info("🎯 Using TP/SL from signal")
             elif signal.stop_loss and not signal.take_profit:
-                # Only SL provided - calculate TP as double the SL percentage
+                # Only SL provided - calculate TP as 2x SL percent based on CURRENT market price
                 sl_price = float(signal.stop_loss)
-                sl_percent = abs(sl_price - entry_price) / entry_price  # Calculate SL percentage
-                tp_percent = sl_percent * 2  # Double the SL percentage for TP
-                tp_price = entry_price * (1 + tp_percent)  # TP above entry for LONG
-                logger.info(f"🎯 Using SL from signal, calculated TP as 2x SL percentage ({tp_percent*100:.1f}%)")
+                sl_percent = abs(sl_price - current_price) / current_price
+                tp_percent = sl_percent * 2
+                tp_price = current_price * (1 + tp_percent)  # TP above market for LONG
+                logger.info(f"🎯 Using SL from signal, calculated TP as 2x SL percentage from market ({tp_percent*100:.1f}%)")
             elif signal.take_profit and not signal.stop_loss:
                 # Only TP provided - use default SL
                 tp_price = float(signal.take_profit)
@@ -374,8 +374,15 @@ class TradingConsumer:
                 logger.info("🎯 Using default TP/SL percentages")
             
             logger.info("🎯 TP/SL Prices:")
-            logger.info(f"   📈 Take Profit: ${tp_price:,.2f} (+{((tp_price/entry_price)-1)*100:.1f}%)")
-            logger.info(f"   📉 Stop Loss: ${sl_price:,.2f} ({((sl_price/entry_price)-1)*100:.1f}%)")
+            percent_base = entry_price
+            if signal.stop_loss and not signal.take_profit:
+                percent_base = current_price  # ensure 2:1 asymmetry based on market as requested
+            logger.info(
+                f"   📈 Take Profit: ${tp_price:,.2f} (+{((tp_price/percent_base)-1)*100:.1f}%)"
+            )
+            logger.info(
+                f"   📉 Stop Loss: ${sl_price:,.2f} ({((sl_price/percent_base)-1)*100:.1f}%)"
+            )
             
             # Determine order type based on price difference
             use_limit_order = False
@@ -534,12 +541,12 @@ class TradingConsumer:
                 sl_price = float(signal.stop_loss)
                 logger.info("🎯 Using TP/SL from signal (SHORT)")
             elif signal.stop_loss and not signal.take_profit:
-                # Only SL provided - calculate TP as double the SL percentage (SHORT logic)
+                # Only SL provided - calculate TP as 2x SL percent based on CURRENT market price (SHORT)
                 sl_price = float(signal.stop_loss)
-                sl_percent = abs(sl_price - entry_price) / entry_price  # Calculate SL percentage
-                tp_percent = sl_percent * 2  # Double the SL percentage for TP
-                tp_price = entry_price * (1 - tp_percent)  # TP below entry for SHORT
-                logger.info(f"🎯 Using SL from signal, calculated TP as 2x SL percentage ({tp_percent*100:.1f}%) (SHORT)")
+                sl_percent = abs(sl_price - current_price) / current_price
+                tp_percent = sl_percent * 2
+                tp_price = current_price * (1 - tp_percent)  # TP below market for SHORT
+                logger.info(f"🎯 Using SL from signal, calculated TP as 2x SL percentage from market ({tp_percent*100:.1f}%) (SHORT)")
             elif signal.take_profit and not signal.stop_loss:
                 # Only TP provided - use default SL
                 tp_price = float(signal.take_profit)
@@ -552,8 +559,15 @@ class TradingConsumer:
                 logger.info("🎯 Using default TP/SL percentages (SHORT)")
             
             logger.info("🎯 TP/SL Prices (SHORT):")
-            logger.info(f"   📈 Take Profit: ${tp_price:,.2f} ({((tp_price/entry_price)-1)*100:.1f}%)")
-            logger.info(f"   📉 Stop Loss: ${sl_price:,.2f} (+{((sl_price/entry_price)-1)*100:.1f}%)")
+            percent_base_short = entry_price
+            if signal.stop_loss and not signal.take_profit:
+                percent_base_short = current_price  # ensure 2:1 asymmetry based on market
+            logger.info(
+                f"   📈 Take Profit: ${tp_price:,.2f} ({((tp_price/percent_base_short)-1)*100:.1f}%)"
+            )
+            logger.info(
+                f"   📉 Stop Loss: ${sl_price:,.2f} (+{((sl_price/percent_base_short)-1)*100:.1f}%)"
+            )
             
             # Determine order type based on price difference
             use_limit_order = False
