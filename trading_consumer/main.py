@@ -384,46 +384,85 @@ class TradingConsumer:
                 f"   📉 Stop Loss: ${sl_price:,.2f} ({((sl_price/percent_base)-1)*100:.1f}%)"
             )
             
-            # Determine order type based on price difference
+            # Determine order type based on execution_type & price difference
             use_limit_order = False
             order_price = None
-            
-            if signal.price:
-                signal_price = float(signal.price)
-                price_diff_pct = abs(current_price - signal_price) / signal_price
-                
-                if price_diff_pct <= 0.05:  # Within 5%
-                    logger.info(
-                        f"📊 Signal price ${signal_price:.3f} within 5% of market ${current_price:.3f} "
-                        f"({price_diff_pct*100:.1f}% diff) - using MARKET order"
-                    )
-                    use_limit_order = False
-                else:
-                    logger.info(
-                        f"📊 Signal price ${signal_price:.3f} differs {price_diff_pct*100:.1f}% from market "
-                        f"${current_price:.3f} - using LIMIT order at signal price"
-                    )
+            target_prices = []
+            exec_type = str(signal.metadata.get("execution_type") or "").lower()
+            if exec_type == "limit_order":
+                # Force LIMIT order(s) at target price(s)
+                raw_targets = signal.metadata.get("target_price")
+                if isinstance(raw_targets, list):
+                    target_prices = [float(p) for p in raw_targets if p is not None]
+                elif raw_targets is not None:
+                    target_prices = [float(raw_targets)]
+                # Fallback to price if provided
+                if not target_prices and signal.price:
+                    target_prices = [float(signal.price)]
+                if target_prices:
                     use_limit_order = True
-                    order_price = signal_price
-            else:
-                logger.info("📊 No signal price provided - using MARKET order")
-                use_limit_order = False
+                    logger.info(f"🎯 Forcing LIMIT order(s) at target price(s): {target_prices}")
+                else:
+                    logger.info("⚠️ execution_type=limit_order but no target price provided; falling back to price logic")
+            
+            if not use_limit_order:
+                if signal.price:
+                    signal_price = float(signal.price)
+                    price_diff_pct = abs(current_price - signal_price) / signal_price
+                    
+                    if price_diff_pct <= 0.05:  # Within 5%
+                        logger.info(
+                            f"📊 Signal price ${signal_price:.3f} within 5% of market ${current_price:.3f} "
+                            f"({price_diff_pct*100:.1f}% diff) - using MARKET order"
+                        )
+                        use_limit_order = False
+                    else:
+                        logger.info(
+                            f"📊 Signal price ${signal_price:.3f} differs {price_diff_pct*100:.1f}% from market "
+                            f"${current_price:.3f} - using LIMIT order at signal price"
+                        )
+                        use_limit_order = True
+                        order_price = signal_price
+                else:
+                    logger.info("📊 No signal price provided - using MARKET order")
+                    use_limit_order = False
             
             # Create order based on price difference
             if use_limit_order:
-                logger.info(f"🎯 Creating LIMIT BUY order @ ${order_price:.3f}...")
-                
-                order = TradeOrder(
-                    symbol=symbol,
-                    side=SignalType.BUY,
-                    order_type=OrderType.LIMIT,
-                    quantity=quantity,
-                    price=Decimal(str(order_price)),
-                    leverage=leverage
-                )
-                
-                result = await self.exchange.create_order(order)
-                logger.info(f"✅ Limit order created: {result.id} @ ${order_price:.3f}")
+                if target_prices:
+                    # Split quantity equally across target prices
+                    per_order_qty = round(quantity / len(target_prices), 6)
+                    results = []
+                    for tp in target_prices:
+                        logger.info(f"🎯 Creating LIMIT BUY order @ ${tp:.3f} (qty {per_order_qty})...")
+                        order = TradeOrder(
+                            symbol=symbol,
+                            side=SignalType.BUY,
+                            order_type=OrderType.LIMIT,
+                            quantity=per_order_qty,
+                            price=Decimal(str(tp)),
+                            leverage=leverage
+                        )
+                        res = await self.exchange.create_order(order)
+                        results.append(res)
+                        logger.info(f"✅ Limit order created: {res.id} @ ${tp:.3f}")
+                    # For forced limit orders, skip immediate TP/SL (until fills happen)
+                    logger.info("⏳ Skipping TP/SL creation until fills occur for forced limit orders")
+                    return
+                else:
+                    logger.info(f"🎯 Creating LIMIT BUY order @ ${order_price:.3f}...")
+                    
+                    order = TradeOrder(
+                        symbol=symbol,
+                        side=SignalType.BUY,
+                        order_type=OrderType.LIMIT,
+                        quantity=quantity,
+                        price=Decimal(str(order_price)),
+                        leverage=leverage
+                    )
+                    
+                    result = await self.exchange.create_order(order)
+                    logger.info(f"✅ Limit order created: {result.id} @ ${order_price:.3f}")
                 
             else:
                 logger.info("🚀 Creating MARKET BUY order...")
@@ -569,46 +608,77 @@ class TradingConsumer:
                 f"   📉 Stop Loss: ${sl_price:,.2f} (+{((sl_price/percent_base_short)-1)*100:.1f}%)"
             )
             
-            # Determine order type based on price difference
+            # Determine order type based on execution_type & price difference
             use_limit_order = False
             order_price = None
-            
-            if signal.price:
-                signal_price = float(signal.price)
-                price_diff_pct = abs(current_price - signal_price) / signal_price
-                
-                if price_diff_pct <= 0.05:  # Within 5%
-                    logger.info(
-                        f"📊 Signal price ${signal_price:.3f} within 5% of market ${current_price:.3f} "
-                        f"({price_diff_pct*100:.1f}% diff) - using MARKET order"
-                    )
-                    use_limit_order = False
-                else:
-                    logger.info(
-                        f"📊 Signal price ${signal_price:.3f} differs {price_diff_pct*100:.1f}% from market "
-                        f"${current_price:.3f} - using LIMIT order at signal price"
-                    )
+            target_prices = []
+            exec_type = str(signal.metadata.get("execution_type") or "").lower()
+            logger.info(f"execution_type={exec_type}, targets={signal.metadata.get('target_price')}")
+            if exec_type == "limit_order":
+                raw_targets = signal.metadata.get("target_price")
+                if isinstance(raw_targets, list):
+                    target_prices = [float(p) for p in raw_targets if p is not None]
+                elif raw_targets is not None:
+                    target_prices = [float(raw_targets)]
+                if not target_prices and signal.price:
+                    target_prices = [float(signal.price)]
+                if target_prices:
                     use_limit_order = True
-                    order_price = signal_price
-            else:
-                logger.info("📊 No signal price provided - using MARKET order")
-                use_limit_order = False
+                    logger.info(f"🎯 Forcing LIMIT order(s) at target price(s): {target_prices}")
+                else:
+                    logger.info("⚠️ execution_type=limit_order but no target price provided; falling back to price logic")
+
+            if not use_limit_order:
+                if signal.price:
+                    signal_price = float(signal.price)
+                    price_diff_pct = abs(current_price - signal_price) / signal_price
+                    if price_diff_pct <= 0.05:
+                        logger.info(
+                            f"📊 Signal price ${signal_price:.3f} within 5% of market ${current_price:.3f} "
+                            f"({price_diff_pct*100:.1f}% diff) - using MARKET order"
+                        )
+                        use_limit_order = False
+                    else:
+                        logger.info(
+                            f"📊 Signal price ${signal_price:.3f} differs {price_diff_pct*100:.1f}% from market "
+                            f"${current_price:.3f} - using LIMIT order at signal price"
+                        )
+                        use_limit_order = True
+                        order_price = signal_price
+                else:
+                    logger.info("📊 No signal price provided - using MARKET order")
+                    use_limit_order = False
             
             # Create order based on price difference
             if use_limit_order:
-                logger.info(f"🎯 Creating LIMIT SELL order (SHORT) @ ${order_price:.3f}...")
-                
-                order = TradeOrder(
-                    symbol=symbol,
-                    side=SignalType.SELL,
-                    order_type=OrderType.LIMIT,
-                    quantity=quantity,
-                    price=Decimal(str(order_price)),
-                    leverage=leverage
-                )
-                
-                result = await self.exchange.create_order(order)
-                logger.info(f"✅ Limit order created: {result.id} @ ${order_price:.3f}")
+                if target_prices:
+                    per_order_qty = round(quantity / len(target_prices), 6)
+                    for tp in target_prices:
+                        logger.info(f"🎯 Creating LIMIT SELL (SHORT) @ ${tp:.3f} (qty {per_order_qty})...")
+                        order = TradeOrder(
+                            symbol=symbol,
+                            side=SignalType.SELL,
+                            order_type=OrderType.LIMIT,
+                            quantity=per_order_qty,
+                            price=Decimal(str(tp)),
+                            leverage=leverage
+                        )
+                        res = await self.exchange.create_order(order)
+                        logger.info(f"✅ Limit order created: {res.id} @ ${tp:.3f}")
+                    logger.info("⏳ Skipping TP/SL creation until fills occur for forced limit orders")
+                    return
+                else:
+                    logger.info(f"🎯 Creating LIMIT SELL order (SHORT) @ ${order_price:.3f}...")
+                    order = TradeOrder(
+                        symbol=symbol,
+                        side=SignalType.SELL,
+                        order_type=OrderType.LIMIT,
+                        quantity=quantity,
+                        price=Decimal(str(order_price)),
+                        leverage=leverage
+                    )
+                    result = await self.exchange.create_order(order)
+                    logger.info(f"✅ Limit order created: {result.id} @ ${order_price:.3f}")
                 
             else:
                 logger.info("🚀 Creating MARKET SELL order (SHORT)...")

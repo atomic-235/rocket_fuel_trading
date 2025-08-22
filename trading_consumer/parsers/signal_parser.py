@@ -142,6 +142,15 @@ class SignalParser:
             trader_conviction = trade.get('trader_conviction')
             
             # Create trading signal
+            # Normalize target_price to a list of floats (per spec)
+            raw_targets = trade.get('target_price')
+            if raw_targets is None:
+                target_price_list = []
+            elif isinstance(raw_targets, list):
+                target_price_list = [float(p) for p in raw_targets if p is not None]
+            else:
+                target_price_list = [float(raw_targets)]
+
             signal = TradingSignal(
                 signal_type=signal_type,
                 symbol=symbol,
@@ -164,6 +173,9 @@ class SignalParser:
                     "original_symbol": raw_symbol,
                     "symbol_needs_resolution": True,  # Flag for later resolution
                     "close_percentage": trade.get('close_percentage'),  # Store for close trades
+                    # New: capture execution type and target price(s) as list
+                    "execution_type": trade.get('execution_type'),
+                    "target_price": target_price_list,
                 }
             )
             
