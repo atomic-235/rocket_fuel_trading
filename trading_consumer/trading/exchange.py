@@ -327,6 +327,7 @@ class HyperliquidExchange:
             # Wait for position to be established (retry up to 15 times with better logic)
             position_found = False
             position_size = 0
+            position_side: Optional[str] = None  # long or short
             
             for attempt in range(15):
                 try:
@@ -349,8 +350,9 @@ class HyperliquidExchange:
                         
                         if contracts != 0:
                             position_size = abs(contracts)
+                            position_side = position.get('side')
                             position_found = True
-                            logger.info(f"✅ Position found: {position_size} contracts for {symbol}")
+                            logger.info(f"✅ Position found: {position_size} contracts for {symbol} (side={position_side})")
                             break
                     
                     logger.info(f"⏳ Waiting for position... attempt {attempt + 1}/15")
@@ -391,6 +393,12 @@ class HyperliquidExchange:
             # Load markets to get current price
             markets = self.exchange.load_markets()
             current_price = float(markets[symbol_formatted]["info"]["midPx"])
+
+            # Determine the correct close side based on position side
+            # long → close with 'sell'; short → close with 'buy'
+            close_side = 'sell'
+            if position_side == 'short':
+                close_side = 'buy'
             
             # Create Take Profit order (following user's example)
             if tp_price:
@@ -398,7 +406,7 @@ class HyperliquidExchange:
                     tp_order = self.exchange.create_order(
                         symbol=symbol_formatted,
                         type='market',
-                        side='sell',
+                        side=close_side,
                         amount=position_size,
                         price=current_price,
                         params={**params, 'takeProfitPrice': tp_price, 'reduceOnly': True}
@@ -412,7 +420,7 @@ class HyperliquidExchange:
                         tp_order_alt = self.exchange.create_order(
                             symbol=symbol_formatted,
                             type='limit',
-                            side='sell',
+                            side=close_side,
                             amount=position_size,
                             price=tp_price,
                             params={**params, 'reduceOnly': True}
@@ -428,7 +436,7 @@ class HyperliquidExchange:
                     sl_order = self.exchange.create_order(
                         symbol=symbol_formatted,
                         type='market',
-                        side='sell',
+                        side=close_side,
                         amount=position_size,
                         price=current_price,
                         params={**params, 'stopLossPrice': sl_price, 'reduceOnly': True}
@@ -442,7 +450,7 @@ class HyperliquidExchange:
                         sl_order_alt = self.exchange.create_order(
                             symbol=symbol_formatted,
                             type='stop_market',
-                            side='sell',
+                            side=close_side,
                             amount=position_size,
                             price=None,
                             params={**params, 'stopPrice': sl_price, 'reduceOnly': True}
