@@ -100,6 +100,11 @@ def load_config(env_file: Optional[str] = None) -> AppConfig:
             default_sl_percent=float(_get_env_value("DEFAULT_SL_PERCENT", "0.02")),
             max_leverage=int(_get_env_value("MAX_LEVERAGE", "10")),
             min_confidence=float(_get_env_value("MIN_CONFIDENCE", "0.7")),
+            trailing_stop_enabled=_parse_bool(_get_env_value("TRAILING_STOP_ENABLED", "true")),
+            trailing_activation_percent=float(_get_env_value("TRAILING_ACTIVATION_PERCENT", "0.01")),
+            trailing_distance_percent=float(_get_env_value("TRAILING_DISTANCE_PERCENT", "0.005")),
+            trailing_update_step_percent=float(_get_env_value("TRAILING_UPDATE_STEP_PERCENT", "0.002")),
+            trailing_check_interval_seconds=int(_get_env_value("TRAILING_CHECK_INTERVAL_SECONDS", "5")),
         )
         
         # Logging configuration

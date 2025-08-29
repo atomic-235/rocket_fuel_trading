@@ -613,6 +613,91 @@ class HyperliquidExchange:
         except Exception as e:
             logger.error(f"Failed to get open orders: {e}")
             return []
+
+    async def update_stop_loss(self, symbol: str, new_sl_price: float) -> bool:
+        """Update existing stop-loss order for a symbol or create one reduce-only.
+        
+        Strategy:
+        - Find existing reduce-only SL for current position side and replace/cancel+create
+        - If not found, create a new reduce-only SL for full current position size
+        """
+        if not self._connected:
+            await self.initialize()
+        try:
+            symbol_formatted = f"{symbol}/USDC:USDC"
+            # Determine user scope
+            params_base = {}
+            if self.config.vault_address:
+                params_base['vaultAddress'] = self.config.vault_address
+                user_scope = self.config.vault_address
+            else:
+                user_scope = self.config.wallet_address
+            
+            # Get current position to know side and size
+            position_params = {"user": user_scope}
+            positions = self.exchange.fetch_positions([symbol_formatted], params=position_params)
+            if not positions or positions[0].get('contracts', 0) == 0:
+                logger.info(f"No open position for {symbol}; skipping SL update")
+                return False
+            pos = positions[0]
+            contracts = abs(pos.get('contracts', 0))
+            if contracts == 0:
+                return False
+            side = pos.get('side')  # 'long' or 'short'
+            close_side = 'sell' if side == 'long' else 'buy'
+            
+            # Fetch open orders and try to identify SL order
+            open_orders = self.exchange.fetch_open_orders(symbol_formatted)
+            sl_order_id = None
+            for o in open_orders or []:
+                # Heuristics: reduceOnly and has stop params or type 'stop_market'
+                params = o.get('info') or {}
+                ro = params.get('reduceOnly') or o.get('reduceOnly')
+                has_stop = ('stopPrice' in params) or ('stopLossPrice' in params)
+                if ro and has_stop:
+                    sl_order_id = o.get('id')
+                    break
+            
+            # Cancel existing SL if present and if price is different/worse than new
+            if sl_order_id:
+                try:
+                    self.exchange.cancel_order(sl_order_id, symbol_formatted)
+                    logger.info(f"Cancelled existing SL order {sl_order_id} for {symbol}")
+                except Exception as e:
+                    logger.warning(f"Failed to cancel existing SL {sl_order_id}: {e}")
+            
+            # Create new SL as stop_market (preferred) with reduceOnly
+            try:
+                order = self.exchange.create_order(
+                    symbol=symbol_formatted,
+                    type='stop_market',
+                    side=close_side,
+                    amount=contracts,
+                    price=None,
+                    params={**params_base, 'stopPrice': float(new_sl_price), 'reduceOnly': True}
+                )
+                logger.info(f"🔒 Updated SL for {symbol} at {new_sl_price} (order {order.get('id')})")
+                return True
+            except Exception as e:
+                logger.error(f"Failed to create stop_market SL for {symbol}: {e}")
+                # Fallback to limit as alternative
+                try:
+                    order = self.exchange.create_order(
+                        symbol=symbol_formatted,
+                        type='limit',
+                        side=close_side,
+                        amount=contracts,
+                        price=float(new_sl_price),
+                        params={**params_base, 'reduceOnly': True}
+                    )
+                    logger.info(f"🔒 Updated SL (limit) for {symbol} at {new_sl_price} (order {order.get('id')})")
+                    return True
+                except Exception as e2:
+                    logger.error(f"Both SL update paths failed for {symbol}: {e2}")
+                    return False
+        except Exception as e:
+            logger.error(f"update_stop_loss failed for {symbol}: {e}")
+            return False
     
     async def get_ticker(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Get ticker information for a symbol."""

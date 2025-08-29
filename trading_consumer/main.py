@@ -18,6 +18,7 @@ from .models.telegram import TelegramMessage
 from .models.trading import TradingSignal, TradeOrder, OrderType, SignalType, OrderStatus
 from .utils.symbol_resolver import resolve_symbol_for_trading
 from decimal import Decimal
+from .utils import TrailingStopService
 
 
 class RecentTrade:
@@ -44,6 +45,7 @@ class TradingConsumer:
         self._running = False
         self._recent_trades: List[RecentTrade] = []  # Track recent trades for deduplication
         self._trade_dedupe_window = timedelta(minutes=10)  # 10 minute window
+        self._trailing_service: Optional[TrailingStopService] = None
     
     async def initialize(self) -> None:
         """Initialize all components."""
@@ -62,6 +64,10 @@ class TradingConsumer:
             
             # Initialize exchange connection
             await self.exchange.initialize()
+            # Start trailing stop service
+            self._trailing_service = TrailingStopService(self.exchange, self.config.trading)
+            if self.config.trading.trailing_stop_enabled:
+                self._trailing_service.start()
             
             logger.info("🚀 Trading Consumer Production Pipeline Initialized")
             logger.info(
@@ -134,6 +140,9 @@ class TradingConsumer:
         if self.exchange:
             await self.exchange.close()
         
+        if self._trailing_service:
+            await self._trailing_service.stop()
+        
         logger.info("✅ Trading consumer stopped")
     
     def _setup_signal_handlers(self) -> None:
@@ -178,6 +187,9 @@ class TradingConsumer:
             
             # Execute trade
             await self._execute_signal(signal)
+            # Ensure trailing service is running
+            if self._trailing_service and self.config.trading.trailing_stop_enabled:
+                self._trailing_service.start()
             
         except Exception as e:
             logger.error(f"❌ Error handling message: {e}")

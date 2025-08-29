@@ -4,6 +4,7 @@ Utility modules for the trading consumer.
 
 from .symbol_resolver import SymbolResolver, get_symbol_resolver, resolve_symbol_for_trading
 from .crypto import SecretManager, get_secret_manager, encrypt_value, decrypt_value, is_encrypted
+from .trailing import TrailingStopService
 
 __all__ = [
     'SymbolResolver', 
@@ -14,4 +15,5 @@ __all__ = [
     'encrypt_value',
     'decrypt_value',
     'is_encrypted'
+    , 'TrailingStopService'
 ] 
