@@ -566,7 +566,9 @@ class HyperliquidExchange:
         
         try:
             # Add user parameter to params for Hyperliquid
-            params = {"user": self.config.wallet_address}
+            # Prefer vault address when configured (positions are held under vault)
+            user_scope = self.config.vault_address or self.config.wallet_address
+            params = {"user": user_scope}
             
             if symbol:
                 # Fetch positions for specific symbol (like user's examples)
@@ -575,6 +577,19 @@ class HyperliquidExchange:
             else:
                 # Fetch all positions
                 positions = self.exchange.fetch_positions(params=params)
+
+            # Fallback: if no positions found and we queried vault, try wallet (or vice versa)
+            if (not positions or all(p.get('contracts', 0) == 0 for p in positions)):
+                alt_user_scope = (
+                    self.config.wallet_address if self.config.vault_address else self.config.vault_address
+                )
+                if alt_user_scope:
+                    alt_params = {"user": alt_user_scope}
+                    if symbol:
+                        symbol_formatted = f"{symbol}/USDC:USDC"
+                        positions = self.exchange.fetch_positions([symbol_formatted], params=alt_params)
+                    else:
+                        positions = self.exchange.fetch_positions(params=alt_params)
             
             formatted_positions = []
             for pos in positions:
