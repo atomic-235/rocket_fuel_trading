@@ -78,7 +78,7 @@ class TradingConfig(BaseModel):
     
     # Trailing stop configuration
     trailing_stop_enabled: bool = Field(default=True)
-    trailing_activation_percent: float = Field(default=0.01, gt=0, le=1)  # Start trailing after 1% in profit
+    trailing_activation_percent: float = Field(default=0.02, gt=0, le=1)  # Start trailing after 1% in profit
     trailing_distance_percent: float = Field(default=0.005, gt=0, le=1)  # Keep SL at 0.5% distance from price
     trailing_update_step_percent: float = Field(default=0.002, gt=0, le=1)  # Only adjust if improves by >=0.2%
     trailing_check_interval_seconds: int = Field(default=15, ge=1)  # Polling interval
