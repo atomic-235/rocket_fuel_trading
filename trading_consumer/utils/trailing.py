@@ -75,50 +75,88 @@ class TrailingStopService:
                 # Only activate trailing after activation threshold in profit
                 activation = entry * (1 + self.config.trailing_activation_percent)
                 if current < activation:
+                    logger.info(
+                        f"[Trailing] {symbol} LONG | price={current:.6f} | entry={entry:.6f} | "
+                        f"activation>={activation:.6f} | highest={state.highest_price:.6f} | decision=not_activated"
+                    )
                     continue
                 # Desired SL = highest - distance
                 desired_sl = state.highest_price * (1 - self.config.trailing_distance_percent)
+                logger.info(
+                    f"[Trailing] {symbol} LONG | price={current:.6f} | entry={entry:.6f} | "
+                    f"highest={state.highest_price:.6f} | desired_sl={desired_sl:.6f}"
+                )
                 # Only move SL up in steps
-                await self._maybe_update_sl(symbol, desired_sl, is_long=True)
+                await self._maybe_update_sl(symbol, desired_sl, is_long=True, current_price=current)
             else:
                 # SHORT: track lowest
                 if current < state.lowest_price:
                     state.lowest_price = current
                 activation = entry * (1 - self.config.trailing_activation_percent)
                 if current > activation:
+                    logger.info(
+                        f"[Trailing] {symbol} SHORT | price={current:.6f} | entry={entry:.6f} | "
+                        f"activation<={activation:.6f} | lowest={state.lowest_price:.6f} | decision=not_activated"
+                    )
                     continue
                 desired_sl = state.lowest_price * (1 + self.config.trailing_distance_percent)
-                await self._maybe_update_sl(symbol, desired_sl, is_long=False)
+                logger.info(
+                    f"[Trailing] {symbol} SHORT | price={current:.6f} | entry={entry:.6f} | "
+                    f"lowest={state.lowest_price:.6f} | desired_sl={desired_sl:.6f}"
+                )
+                await self._maybe_update_sl(symbol, desired_sl, is_long=False, current_price=current)
 
-    async def _maybe_update_sl(self, symbol: str, desired_sl: float, is_long: bool) -> None:
+    async def _maybe_update_sl(self, symbol: str, desired_sl: float, is_long: bool, current_price: float) -> None:
         try:
             # Fetch existing SL via open orders to compare and enforce monotonic move
             open_orders = await self.exchange.get_open_orders(symbol)
             current_sl: Optional[float] = None
+            current_tp: Optional[float] = None
             for o in open_orders or []:
                 params = o.get('info') or {}
-                has_stop = params.get('stopPrice') or params.get('stopLossPrice')
-                if has_stop:
+                # Identify SL
+                sl_val = params.get('stopPrice') or params.get('stopLossPrice')
+                if sl_val:
                     try:
-                        current_sl = float(has_stop)
+                        current_sl = float(sl_val)
                     except Exception:
                         current_sl = None
-                    break
+                # Identify TP (may be set via takeProfitPrice)
+                tp_val = params.get('takeProfitPrice')
+                if tp_val and current_tp is None:
+                    try:
+                        current_tp = float(tp_val)
+                    except Exception:
+                        current_tp = None
+            logger.info(
+                f"[Trailing] {symbol} | price={current_price:.6f} | current_sl={current_sl} | "
+                f"current_tp={current_tp} | desired_sl={desired_sl:.6f}"
+            )
             # Step gating
             step = self.config.trailing_update_step_percent
             if current_sl is not None:
                 if is_long:
                     # Move only up and if improved by step
                     if desired_sl <= current_sl * (1 + step):
+                        logger.info(
+                            f"[Trailing] {symbol} decision=keep | reason=step_too_small | "
+                            f"desired_sl={desired_sl:.6f} <= current_sl*step={current_sl*(1+step):.6f}"
+                        )
                         return
                 else:
                     # Move only down and if improved by step (for shorts SL is above price, so lower is improvement)
                     if desired_sl >= current_sl * (1 - step):
+                        logger.info(
+                            f"[Trailing] {symbol} decision=keep | reason=step_too_small | "
+                            f"desired_sl={desired_sl:.6f} >= current_sl*step={current_sl*(1-step):.6f}"
+                        )
                         return
             # Apply update
             ok = await self.exchange.update_stop_loss(symbol, desired_sl)
             if not ok:
-                logger.warning(f"Trailing SL update failed for {symbol}")
+                logger.warning(f"[Trailing] {symbol} decision=update_failed | desired_sl={desired_sl:.6f}")
+            else:
+                logger.info(f"[Trailing] {symbol} decision=updated_sl | new_sl={desired_sl:.6f}")
         except Exception as e:
             logger.error(f"_maybe_update_sl error for {symbol}: {e}")
 
